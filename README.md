@@ -1,14 +1,15 @@
 # tswMP
 Tower of the Sorcerer for Windows MovePoint (座標移動) / 魔塔英文原版主角坐标快捷移动
-![座標移動](https://pixiv.cat/21958211.jpg)
 
 See Also / 另请参见: [tswKai（改）](https://github.com/Z-H-Sun/tswKai)
+
+![座標移動](https://pixiv.cat/21958211.jpg)
 
 ## Scope of application / 适用范围
 This mod can only be applied to TSW English Ver 1.2. You can download its installer <ins>[here](https://ftp.vector.co.jp/14/65/3171/tsw12.exe)</ins> or visit [the official website](http://hp.vector.co.jp/authors/VA013374/game/egame0.html). You will have to run the executable **as administrator** to install. / 本修改器仅适用于英文原版魔塔V1.2，可于<ins>[此处](https://ftp.vector.co.jp/14/65/3171/tsw12.exe)</ins>下载其安装包，或[点此](http://hp.vector.co.jp/authors/VA013374/game/egame0.html)访问官网。必须右键**以管理员权限运行**才可成功安装。
 
 ## Usage / 使用方法
-* Download <ins>[tswMP](https://github.com/Z-H-Sun/tswMP/releases/download/v2.02/tswMP.exe)</ins> here. / 在此处下载 <ins>[tswMP](https://github.com/Z-H-Sun/tswMP/releases/download/v2.02/tswMP.exe)</ins>。
+* Download <ins>[tswMP](https://github.com/Z-H-Sun/tswMP/releases/latest/download/tswMP.exe)</ins> here. / 在此处下载 <ins>[tswMP](https://github.com/Z-H-Sun/tswMP/releases/latest/download/tswMP.exe)</ins>。
 * Open tswMP followed by TSW. Otherwise, an error message will be prompted. / 先开魔塔再开修改器，否则报错。
 * You will see a message box when you start and close tswMP. Press OK to continue. / 开启和关闭 tswMP 时会弹出提示框，点击确定继续。
 * Within the TSW map, move your cursor to the desired position, and press <kbd>F7</kbd>. A green preview box will appear at that location, and then: / 在魔塔地图内，将鼠标移至想要传送的位置，然后按下 <kbd>F7</kbd>，将在该处显示绿色预览框，随后：
@@ -21,5 +22,5 @@ This mod can only be applied to TSW English Ver 1.2. You can download its instal
 ## Troubleshooting / 疑难解答
 * **Cannot find the TSW process and/or window**: Please check if TSW V1.2 is currently running. / **找不到魔塔进程或窗口**：请检查是否已经打开魔塔 1.2 版本。
 * **Cannot register hotkey**: The hotkey <kbd>F7</kbd> might be currently occupied by other processes or another instance of tswMP. Please close them to avoid confliction. / **无法注册热键**：快捷键 <kbd>F7</kbd> 可能已被其他程序抢占，或另一个 tswMP 程序正在运行。尝试关闭它们以避免冲突。
-* For the above two issues, as an advanced option, you can create a plain text file named `tswMPdebug.txt` in the current folder, which will be loaded by the program, and then you can manually assign `$hWnd`, `$pID`, `MODIFIER`, or `KEY` there. `MODIFIER` = `1` for <kbd>Alt</kbd>, `2` for <kbd>Ctrl</kbd>, `4` for <kbd>Shift</kbd>, and `8` for <kbd>Win</kbd>, and you can add several up to form a combination; `KEY` is the virtual keycode for the desired hotkey. / 针对上述两个问题的高级解决方案：可在当前目录下新建一名为 `tswMPdebug.txt` 的纯文本文档（其中内容将被程序所读取），然后在其中手动给`$hWnd`、`$pID`、`MODIFIER`、`KEY`赋值。`MODIFIER` = `1`：<kbd>Alt</kbd>, `2`：<kbd>Ctrl</kbd>, `4`：<kbd>Shift</kbd>, `8`：<kbd>Win</kbd>，也可将若干项相加表示组合键；`KEY`为快捷键对应虚拟键码。
+* For the above two issues, as an advanced option, you can create a plain text file named `tswMPdebug.txt` in the current folder (*[example here](/tswMPdebug.txt)*), which will be loaded by the program, and then you can manually assign `$hWnd`, `$pID`, `MODIFIER`, or `KEY` there. `MODIFIER` = `1` for <kbd>Alt</kbd>, `2` for <kbd>Ctrl</kbd>, `4` for <kbd>Shift</kbd>, and `8` for <kbd>Win</kbd>, and you can add several up to form a combination; `KEY` is the virtual keycode for the desired hotkey. / 针对上述两个问题的高级解决方案：可在当前目录下新建一名为 `tswMPdebug.txt` 的纯文本文档（[参考此样例](/tswMPdebug.txt)，其中内容将被程序所读取），然后在其中手动给`$hWnd`、`$pID`、`MODIFIER`、`KEY`赋值。`MODIFIER` = `1`：<kbd>Alt</kbd>, `2`：<kbd>Ctrl</kbd>, `4`：<kbd>Shift</kbd>, `8`：<kbd>Win</kbd>，也可将若干项相加表示组合键；`KEY`为快捷键对应虚拟键码。
 * **Cannot open the TSW process for writing / write to the TSW process**: C'est la vie (not likely, though). You can check if the PID of TSW you are running is indeed the one shown in the prompt. / **无法打开魔塔进程/将数据写入魔塔进程**：无解（但不太可能发生）。你可以检查下目前正在运行的魔塔程序的进程号是否匹配提示框中的数字。

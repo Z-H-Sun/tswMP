@@ -44,7 +44,7 @@ $time = 0
 $x_pos = $y_pos = -1
 raise("Cannot register hotkey. It might be currently occupied by\nother processes or another instance of tswMP. Please close\nthem to avoid confliction.\n\nDefault: F7 (0+ 118); current (#{MODIFIER}+ #{KEY}). As an advanced\noption, you can manually assign MODIFIER and KEY in `tswMPdebug.txt'.") if Win32API.new('user32', 'RegisterHotKey', 'lill', 'l').call(0, 0, MODIFIER, KEY).zero?
 
-MESSAGE_BOX.call($hWnd, "tswMovePoint is currently running.\n\nUse F7 to operate:\nPress once = preview;\ntwice (at the same position) = confirm;\nonce outside = cancel;\nquickly press twice outside = quit.", 'tswMP', MB_ICONINFORMATION)
+MESSAGE_BOX.call($hWnd, "tswMovePoint is currently running.\n\nUse hotkey (Default=F7) to operate:\nPress once = preview;\ntwice (at the same position) = confirm;\nonce outside = cancel;\nquickly press twice outside = quit.", 'tswMP', MB_ICONINFORMATION)
 
 msg = ' ' * 44
 while true
@@ -57,8 +57,8 @@ while true
   xy = msg[offset + 4, 8]
   Win32API.new('user32','ScreenToClient','lp','l').call($hWnd, xy)
   x, y = xy.unpack('ll')
-  x_pos = ((x - W*0.225) / SIZE).to_i
-  y_pos = ((y - H*0.057) / SIZE).to_i
+  x_pos = ((x - W*0.225) / SIZE).floor
+  y_pos = ((y - H*0.057) / SIZE).floor
   if x_pos == $x_pos and y_pos == $y_pos # same pos twice
     SEND_MESSAGE.call($hWnd, WM_SETREDRAW, 1, 0)
     res = WRITE_PROCESS.call($hPrc, BASE_ADDRESS+OFFSET_XPOS, [x_pos].pack('l'), 4, '    ')
