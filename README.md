@@ -1,7 +1,7 @@
 # tswMP
 Tower of the Sorcerer for Windows MovePoint (座標移動) / 魔塔英文原版主角坐标快捷移动
 
-See Also / 另请参见: [tswKai（改）](https://github.com/Z-H-Sun/tswKai); [tswSL](https://github.com/Z-H-Sun/tswSL)
+See Also / 另请参见: [tswKai（改）](https://github.com/Z-H-Sun/tswKai); [tswSL（快捷存档）](https://github.com/Z-H-Sun/tswSL)
 
 ![座標移動](https://pixiv.cat/21958211.jpg)
 
@@ -19,6 +19,10 @@ See Also / 另请参见: [tswKai（改）](https://github.com/Z-H-Sun/tswKai); [
   * To change to a different position, press <kbd>F7</kbd> again elsewhere; / 在另一处地点再次按下 <kbd>F7</kbd> 以变更目的地；
   * To cancel, press <kbd>F7</kbd> outside the TSW map. / 在魔塔地图外再次按下 <kbd>F7</kbd> 以取消。
 * Quickly press <kbd>F7</kbd> twice outside the TSW map (within 0.5 second) to quit tswMP. / 在魔塔地图外，在半秒内快速连按两次 <kbd>F7</kbd> 以退出 tswMP。
+
+### New Features / 新版特性
+* You can now have tswMP running in the background all the time; whenever a new TSW process is opened, the target of tswMP will be automatically switched to that process. Previously, if you quit and reopen another instance of TSW, you will have to close and reopen tswMP as well. / 现在可以在后台一直保持 tswMP 运行，即使新开另一个 TSW 进程，tswMP 也会自动切换作用对象为当前 TSW 进程。之前的版本中，如果退出 TSW 后重开，则 tswMP 也需要退出重开。
+* Added tips shown at the status bar of TSW. / 新增底端状态栏显示提示。
 
 ## Troubleshooting / 疑难解答
 * **Cannot find the TSW process and/or window**: Please check if TSW V1.2 is currently running. / **找不到魔塔进程或窗口**：请检查是否已经打开魔塔 1.2 版本。
