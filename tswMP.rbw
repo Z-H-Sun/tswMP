@@ -62,7 +62,7 @@ $time = 0
 $x_pos = $y_pos = -1
 raise("Cannot register hotkey. It might be currently occupied by\nother processes or another instance of tswMP. Please close\nthem to avoid confliction. tswMP has stopped.\n\nDefault: F7 (0+ 118); current (#{MODIFIER}+ #{KEY}). As an advanced\noption, you can manually assign MODIFIER and KEY in `tswMPdebug.txt'.") if Win32API.new('user32', 'RegisterHotKey', 'lill', 'l').call(0, 0, MODIFIER, KEY).zero?
 
-MESSAGE_BOX.call($hWnd, "tswMovePoint is currently running.\n\nUse hotkey (Default=F7) to operate:\nPress once = preview;\ntwice (at the same position) = confirm;\nonce outside = cancel;\nquickly press twice outside = quit.", 'tswMP', MB_ICONINFORMATION)
+MESSAGE_BOX.call($hWnd, "tswMovePoint is currently running.\n\nUse hotkey (Default=F7) to operate:\nPress once = preview;\ntwice (at the same position) = confirm;\nonce outside = cancel;\nquickly once inside and then once outside = refresh;\nquickly press twice outside = quit.", 'tswMP', MB_ICONINFORMATION)
 
 msg = ' ' * 44
 while true
@@ -92,7 +92,15 @@ while true
   end
   if x_pos < 0 or x_pos > 10 or y_pos < 0 or y_pos > 10 # outside
     SEND_MESSAGE.call($hWndText, 0xC, 0, '')
-    break if diff < 500 # press twice
+    if diff < 500 # press twice
+      if $x_pos >= 0 and $y_pos >= 0 # once inside and once outside
+        seq = ($W >= 800) ? [48, 49] : [49, 48] # set size = 640x400 then 800*500 to reset status
+        seq.each {|i| SEND_MESSAGE.call($hWnd, 0x111, i, 0)} # WM_COMMAND
+        SEND_MESSAGE.call($hWndText, 0xC, 0, "tswMP: All game status refreshed.")
+      else # twice outside
+        break
+      end
+    end
     $x_pos = $y_pos = -1 # cancel preview
     next
   end
