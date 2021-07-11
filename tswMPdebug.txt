@@ -1,9 +1,10 @@
-# If the program fails to automatically find the handle of the window or process ID of TSW, uncomment the following lines and manually assign them here:
+# If the program fails to automatically find the handle of the window or process/thread ID of TSW, uncomment the following lines and manually assign them here:
 # $hWnd = 0x0
 # $pID = 0
+# $tID = 0
 
-# The following lines modifies the hotkey to be Winkey+F2
-MODIFIER = 8
+# The following lines modifies the hotkey to be Alt+F2
+MODIFIER = 1
 KEY = 113
 # Other examples:
 # MODIFIER = 6; KEY = 90 # Ctrl+Shift+Z
@@ -12,3 +13,10 @@ KEY = 113
 # Cheat sheet: 0=None, 1=Alt, 2=Ctrl, 4=Shift, 8=Win.
 # Virtual key codes: https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes. A-Z is just their ASCII (65-90). F1-F12 is 112-123.
 
+# To successfully quit the program by holding the hotkey, you should make sure your keyboard repeat delay is longer than INTERVAL_REHOOK AND keyboard repeat rate is shorter than INTERVAL_QUIT. The default setting is good as long as you have not made changes to your system settings; otherwise, you should make changes accordingly to the following two lines
+# Note that INTERVAL_REHOOK should not be too small (typically >150 ms), because you need to quickly press the hotkey twice within INTERVAL_REHOOK to trigger the "rehook" function
+INTERVAL_REHOOK = 400
+INTERVAL_QUIT = 60
+
+# The following line turns off auto-refresh of TSW status
+$autoRefresh = false
