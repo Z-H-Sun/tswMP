@@ -314,10 +314,9 @@ module HookProcAPI
   end
   def self.unhookK
     return false if @hkhook == nil
-    return false if UnhookWindowsHookEx.call(@hkhook).zero?
+    UnhookWindowsHookEx.call(@hkhook)
 #   puts 'unhookK called!'
     @hkhook = nil
-    return true
   end
   def self.rehookK
     unhookK
@@ -344,10 +343,9 @@ module HookProcAPI
     $x_pos = $y_pos = -1
     SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, '')
 
-    return false if UnhookWindowsHookEx.call(@hmhook).zero?
+    UnhookWindowsHookEx.call(@hmhook)
 #   puts 'unhookM called!'
     @hmhook = nil
-    return true
   end
   def self.statusM
     return !@hmhook.nil?
