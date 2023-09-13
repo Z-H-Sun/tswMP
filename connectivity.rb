@@ -4,16 +4,20 @@ module Connectivity
   @check_mag = false # whether to check sorcerers and magicians
   @ancestor = Array.new(121) # for each position, record its parent position (where it is moved from)
   @points = []
+  @destTile = 0
   class << self
     attr_writer :check_mag
     attr_reader :points
     attr_reader :index
+    attr_reader :destTile
   end
 
   module_function
   def main(ox, oy, tx, ty) # starting point: (ox, oy); end point: (tx, ty)
-    case $mapTiles[11*ty + tx]
-    when 4, 5, 8, 13, 14, 15, 17, 125..121, 123..132, 159..255 # gate; prison; lava; starlight; wings of altar; dragon; other
+    @t_index = 11*ty + tx
+    @destTile = $mapTiles[@t_index]
+    case @destTile
+    when 4, 5, 8, 13, 14, 15, 17, 115..121, 123..132, 159..255 # gate; prison; lava; starlight; wings of altar; dragon; other
       return nil
     end
     @o_index = 11*oy + ox
@@ -22,22 +26,24 @@ module Connectivity
     @ancestor.fill(nil)
     @ox = ox; @oy = oy
     @tx = tx; @ty = ty
+    @init = true
     result = floodfill()
     unless result # magicians in the way? loosen the constraints a bit and search again
       
     end
 
     if result
-      @points = [tx*$SIZE+$MAP_LEFT+$SIZE/2, ty*$SIZE+$MAP_TOP+$SIZE/2]
-      unless result.zero? # in this case @index is 1 step away from destination
-        y, x = @index.divmod(11)
-        @points.push(x*$SIZE+$MAP_LEFT+$SIZE/2, y*$SIZE+$MAP_TOP+$SIZE/2)
-      end
+      @points = [tx*$TILE_SIZE+$MAP_LEFT+$TILE_SIZE/2, ty*$TILE_SIZE+$MAP_TOP+$TILE_SIZE/2]
       index = @index
+      if @index != @t_index # in this case @index is 1 step away from destination
+        y, x = @index.divmod(11)
+        @points.push(x*$TILE_SIZE+$MAP_LEFT+$TILE_SIZE/2, y*$TILE_SIZE+$MAP_TOP+$TILE_SIZE/2)
+        @index = @t_index if result.zero? # can directly go to that position
+      end
       while index != @o_index
         index = @ancestor[index]
         y, x = index.divmod(11)
-        @points.push(x*$SIZE+$MAP_LEFT+$SIZE/2, y*$SIZE+$MAP_TOP+$SIZE/2)
+        @points.push(x*$TILE_SIZE+$MAP_LEFT+$TILE_SIZE/2, y*$TILE_SIZE+$MAP_TOP+$TILE_SIZE/2)
       end
     end
 
@@ -62,13 +68,19 @@ module Connectivity
     until @queue.empty?
       @index = @queue.shift # current index; remove the first element of @queue
       next if $mapTiles[@index] <= 0 # already visited before
-      next unless check(@index, (@o_index!=@index)&&@check_mag) # never check_mag for the origin
-      $mapTiles[@index] = 0
+      if @index == @o_index
+        next unless @init # do not process unless for the first time
+        check(@index, false) # just initialize @x, @y, @left, @right, @up, & @down
+        @init = false
+      else
+        next unless check(@index)
+        $mapTiles[@index] = 0
+      end
       dx = @x - @tx; dy = @y - @ty
       if (dx*dy).zero? and (dx+dy).abs == 1 # (0,+-1) or (+-1,0), i.e. 1 step away. If so, we can stop now [note: do not consider (0,0)]
-        if $mapTiles[@index] == 6
+        if @destTile == 0 or @destTile == 6
           return 0 unless @check_mag # in this case, can directly go to that destination
-          return 0 if check(11*@ty + @tx) # check the destination
+          return 0 if check(@t_index) # check the destination
         end
         return dx | (dy << 1) # otherwise, should go to @index and then go -2: down; -1:right; 0: X; 1:left; 2: up
       end

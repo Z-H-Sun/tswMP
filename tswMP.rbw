@@ -1,4 +1,3 @@
-require './connectivity'
 require 'win32/api'
 include Win32
 GET_MESSAGE = API.new('GetMessage','PLLL','L', 'user32')
@@ -13,10 +12,11 @@ GET_PID = API.new('GetWindowThreadProcessId', 'LP', 'L', 'user32')
 ATT_INPUT = API.new('AttachThreadInput', 'III', 'I', 'user32')
 MESSAGE_BOX = API.new('MessageBox', 'LSSI', 'L', 'user32')
 ISWINDOW = API.new('IsWindow', 'L', 'L', 'user32')
-FIND_WIN = API.new('FindWindowEx', 'LLSL', 'L', 'user32')
+FIND_WIN = API.new('FindWindow', 'SL', 'L', 'user32')
 DRAW_TEXT = API.new('DrawText', 'LSIPL', 'L', 'user32') # ansi
 DRAW_TEXT_W = API.new('DrawTextW', 'LSIPL', 'L', 'user32') # unicode
-POLY_LINE = API.new('Polyline', 'LSI', 'L', 'gdi32') # ansi
+TEXT_OUT = API.new('TextOut', 'LLLSL', 'L', 'gdi32')
+POLY_LINE = API.new('Polyline', 'LSI', 'L', 'gdi32')
 BIT_BLT = API.new('BitBlt', 'LLLLLLLLL', 'L', 'gdi32')
 INVAL_RECT = API.new('InvalidateRect','LPL','L', 'user32')
 GET_FOC = API.new('GetFocus','V','L', 'user32')
@@ -28,18 +28,24 @@ GET_DC = API.new('GetDC', 'L', 'L', 'user32')
 GET_OBJ = API.new('GetStockObject', 'L', 'L', 'gdi32')
 SEL_OBJ = API.new('SelectObject', 'LL', 'L', 'gdi32')
 SET_COLOR = API.new('SetDCBrushColor', 'LL', 'L', 'gdi32')
+SET_TEXTCOLOR = API.new('SetTextColor', 'LL', 'L', 'gdi32')
+SET_BKCOLOR = API.new('SetBkColor', 'LL', 'L', 'gdi32')
 
 WM_SETTEXT = 0xC
 WM_GETTEXT = 0xD
 WM_COMMAND = 0x111
 WM_HOTKEY = 0x312
 VK_LWIN = 0x5B
-VK_RWIN = 0x5C
+VK_ESCAPE = 0x1B
 VK_LEFT = 0x25
 VK_UP = 0x26
 VK_RIGHT = 0x27
 VK_DOWN = 0x28
 DC_BRUSH = 18
+DT_CENTER = 1
+DT_VCENTER = 4
+DT_SINGLELINE = 0x20
+DT_CENTERBOTH = DT_CENTER | DT_VCENTER | DT_SINGLELINE
 PROCESS_VM_WRITE = 0x20
 PROCESS_VM_READ = 0x10
 PROCESS_VM_OPERATION = 0x8
@@ -48,7 +54,7 @@ MB_ICONASTERISK = 0x40
 MB_SETFOREGROUND = 0x10000
 # Ternary Raster Operations
 RASTER_DPO = 0xFA0089
-HIGHLIGHT_COLOR = [0x22AA22, 0x22AAAA, 0x2222FF, 0xC07F40, 0x99CCAA] # OK, suspicious, no-go, item, polyline (note: not RGB, but rather BGR)
+HIGHLIGHT_COLOR = [0x22AA22, 0x60A0C0, 0x2222FF, 0xC07F40, 0x88BB99, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
 case [''].pack('p').size
 when 4 # 32-bit ruby
   MSG_INFO_STRUCT = 'L7'
@@ -65,14 +71,29 @@ OFFSET_FLOOR = 0xb8698
 OFFSET_MAP = 0xb8934
 OFFSET_EVENTFLAG = 0x8c5ac
 OFFSET_SACREDSHIELD = 0xb872c
+OFFSET_EDIT8 = 0x1c8 # status bar textbox at bottom
+OFFSET_IMAGE6 = 0x254 # orb of hero
+OFFSET_HWND = 0xc0
+# OFFSET_TIMER_ENABLED = 0x20
+OFFSET_CTL_LEFT = 0x24
+OFFSET_CTL_TOP = 0x28
+OFFSET_CTL_WIDTH = 0x2c
+# OFFSET_CTL_HEIGHT = 0x30
+# OFFSET_CTL_VISIBLE = 0x37 # byte
+# OFFSET_CTL_ENABLED = 0x38 # byte
+# OFFSET_CLIENTHEIGHT = 0x14c
 MIDSPEED_MENUID = 33 # The idea is to hijack the midspeed menu
 MIDSPEED_ADDR = 0x7f46d + BASE_ADDRESS # so once click event of that menu item is triggered, arbitrary code can be executed
-MIDSPEED_ORIG = "\x6F\0\0\0" # original bytecode (call TTSW10.speedmiddle@0x47f4e0)
+MIDSPEED_ORIG = 0x6F # original bytecode (call TTSW10.speedmiddle@0x47f4e0)
 HELP_MENUID = 54 # similar with above
 HELP_ADDR = 0x7d2d8 + BASE_ADDRESS # now the help menu is replaced by syokidata2 subroutine (refresh event)
 REFRESH_ADDR = 0x54de8 + BASE_ADDRESS # TTSW10.syokidata2
 REFRESH_XYPOS_ADDR = 0x42c38 + BASE_ADDRESS # TTSW10.mhyouji
 TIMER1_ADDR = 0x43120 + BASE_ADDRESS
+TIMER2_ADDR = 0x5265c + BASE_ADDRESS
+TTSW_ADDR = 0x8c510 + BASE_ADDRESS
+MAP_LEFT_ADDR = 0x8c578 + BASE_ADDRESS
+MAP_TOP_ADDR = 0x8c57c + BASE_ADDRESS
 MOVE_ADDR = [0x484c58, 0x484c04, nil, 0x484bb0, 0x484b5c] # down / right / left / up
 ITEMS = {'name' => ['OrbOfHero', 'OrbWisdom', 'OrbFlight', 'Elixir', 'Mattock', 'DestrBall', 'WarpWing', 'AscentWing',
          'DescntWing', 'SnowCryst', 'MagicKey', 'SupMattock'], 'position' => [0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13], 'address' =>
@@ -85,12 +106,17 @@ MODIFIER = 0
 KEY = 118
 INTERVAL_REHOOK = 450 # the interval for rehook (in msec)
 INTERVAL_QUIT = 50 # for quit (in msec)
+INTERVAL_DRAW = 0.025 # draw the item bar after this interval (in sec); without this interval, the game window may redraw during this time which will mess up with our drawing
+
+require './connectivity'
+require './strings'
+
 $buf = "\0" * 256
-$autoRefresh = true
 
 module Win32
   class API
     def self.msgbox(text, flag=MB_ICONASTERISK)
+      text = STRINGS[text] if text.is_a?(Integer)
       if ISWINDOW.call($hWnd || 0).zero?
         $hWnd = 0 # if the window has gone, create a system level msgbox
       else
@@ -139,6 +165,7 @@ module HookProcAPI
   @hmhook = nil
   @itemAvail = [] # the items you have
   @winDown = false # [WIN] pressed; active
+  @lastIsInEvent = false
   @access = nil # the destination is accessible?
   @flying = nil # currently using OrbOfFly; active
   @error = nil # exception within hook callback function
@@ -153,55 +180,123 @@ module HookProcAPI
   def finally # code block wrapper
     yield
   end
+  def getClassName(hWnd)
+    len = GetClassName.call(hWnd, $buf, 256)
+    return $buf[0, len]
+  end
+  def getFocusClassName()
+    return getClassName(GET_FOC.call)
+  end
   def isButtonFocused()
-    len = GetClassName.call(GET_FOC.call, $buf, 256)
-    return ($buf[0, len] == 'TButton')
+    return getFocusClassName == 'TButton'
+  end
+  def isSLActive() # this is to make compatible with tswSL (or else ESC won't function in tswSL)
+    case getFocusClassName
+    when 'ComboBox', 'ComboLBox', 'Edit'
+      return true
+    end
+    return false
   end
   def isInEvent()
-    READ_PROCESS.call_r($hPrc, OFFSET_EVENTFLAG+BASE_ADDRESS, $buf, 4, 0)
-    result = !($buf.unpack('L')[0].zero?)
-    #SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, 'tswMP: Please wait for game event to complete...') if result
+    result = (isButtonFocused and !@flying)
+    unless result
+      result = !(readMemoryDWORD(OFFSET_EVENTFLAG+BASE_ADDRESS).zero?)
+    end
+
+    if result
+      unless @lastIsInEvent
+        @lastIsInEvent = result
+        showMsg(1, 0)
+        $x_pos = $y_pos = -1 # reset pos
+      end
+    else
+      if @lastIsInEvent
+        @lastIsInEvent = result
+        if @hmhook
+          callFunc(TIMER2_ADDR) # immediately call TIMER2TIMER. Normally, the timer2 will wait 300 msec, then run once (i.e. will disable itself after the first run), where it will call `TTSW10.itemlive (which ends the in-event status)`. This will enforce redrawing the window, which will mess up with our drawing. So we will call it by ourselves without the 300 ms delay; then begin drawing
+          sleep(INTERVAL_DRAW)
+          drawItemsBar
+          _msHook('init', WM_MOUSEMOVE, 0) # continue teleportation
+        else
+          INVAL_RECT.call($hWnd, $msgRect, 0) # clear message bar
+        end
+      end
+    end
     return result
   end
-  def abandon()
-    unhookM
+  def showMsg(colorIndex, textIndex, *argv)
+    SET_COLOR.call($hDC, HIGHLIGHT_COLOR[colorIndex])
+    SET_BKCOLOR.call($hDC, HIGHLIGHT_COLOR[colorIndex])
+    FILL_RECT.call($hDC, $msgRect, $hBr)
+    DRAW_TEXT.call($hDC, STRINGS[textIndex] % argv, -1, $msgRect, DT_CENTERBOTH)
+  end
+  def abandon(force=true)
+    unhookM(force)
     @winDown = false
+    @lastIsInEvent = false
     @flying = nil
   end
-  def callFunc(address) # execute the subroutine at the given address
-    WRITE_PROCESS.call_r($hPrc, MIDSPEED_ADDR, [address-MIDSPEED_ADDR-4].pack('l'), 4, 0)
-    SEND_MESSAGE.call($hWnd, WM_COMMAND, MIDSPEED_MENUID, 0)
-    WRITE_PROCESS.call_r($hPrc, MIDSPEED_ADDR, MIDSPEED_ORIG, 4, 0) # restore
+  def drawItemsBar()
+    floor = readMemoryDWORD(OFFSET_FLOOR+BASE_ADDRESS)
+    if floor > 40
+      Connectivity.check_mag = readMemoryDWORD(OFFSET_SACREDSHIELD+BASE_ADDRESS).zero?
+    else
+      Connectivity.check_mag = false
+    end
+    READ_PROCESS.call_r($hPrc, OFFSET_MAP+floor*123+2+BASE_ADDRESS, $buf, 121, 0)
+    $mapTiles = $buf.unpack('C121')
+
+    @itemAvail = []
+    SET_BKCOLOR.call($hDC, HIGHLIGHT_COLOR[-2])
+    for i in 0..11 # check what items you have
+      next if readMemoryDWORD(ITEMS['address'][i]).zero?
+      @itemAvail << i
+      y = ITEMS['position'][i]
+      x, y = y%3, y/3
+      x = x * $TILE_SIZE + $ITEMSBAR_LEFT
+      y = y * $TILE_SIZE + $ITEMSBAR_TOP
+      if i == 2
+        DRAW_TEXT_W.call($hDC, "\xBC\x25\n\0\xB2\x25", 3, $OrbFlyRect[-1], 0) # U+25BC/25B2 = down/up triangle
+      else
+        TEXT_OUT.call($hDC, x, y, ITEMS['key'][i].chr, 1)
+      end
+      SET_COLOR.call($hDC, HIGHLIGHT_COLOR[3])
+      BIT_BLT.call($hDC, x, y, $TILE_SIZE, $TILE_SIZE, $hDC, 0, 0, RASTER_DPO)
+    end
   end
   def _msHook(nCode, wParam, lParam)
+    block = false # block input?
     finally do
       break if nCode.to_i < 0 # do not process
       case wParam
       when WM_LBUTTONDOWN, WM_RBUTTONDOWN # teleportation
-        if isButtonFocused then abandon(); break end
         break if $x_pos < 0 or $y_pos < 0 or isInEvent
+        block = true
         cheat = (wParam == WM_RBUTTONDOWN)
         if cheat
           x, y = $x_pos, $y_pos
+          cheat = (@access != 0)
+          showMsgTxtbox(cheat ? 8 : -1)
         else
           break unless @access
           y, x = Connectivity.index.divmod(11)
+          showMsgTxtbox(-1)
         end
-        WRITE_PROCESS.call_r($hPrc, BASE_ADDRESS+OFFSET_XPOS, [x].pack('l'), 4, 0)
-        WRITE_PROCESS.call_r($hPrc, BASE_ADDRESS+OFFSET_YPOS, [y].pack('l'), 4, 0)
+        writeMemoryDWORD(BASE_ADDRESS+OFFSET_XPOS, x)
+        writeMemoryDWORD(BASE_ADDRESS+OFFSET_YPOS, y)
 
         WRITE_PROCESS.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # TIMER1TIMER push ebx (re-enable)
-        callFunc(REFRESH_XYPOS_ADDR) if $autoRefresh # TTSW10.mhyouji (only refresh braveman position; do not refresh whole map)
+        callFunc(REFRESH_XYPOS_ADDR) # TTSW10.mhyouji (only refresh braveman position; do not refresh whole map)
 
-        unless @access == 0 or cheat
+        if @access == 0 or cheat
+          showMsg(cheat ? 2 : 0, 5, x, y, @itemAvail.empty? ? '.' : STRINGS[6])
+        else
           callFunc(MOVE_ADDR[@access+2])
         end
 
-        SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, (cheat ? '[CHEAT] ' : '') + 'tswMP: Teleported to (%X,%X). Press a key or move mouse to continue.' % [x, y])
         checkTSWsize()
         break
       when WM_MOUSEMOVE
-        if isButtonFocused then abandon(); break end
       else
         break
       end
@@ -216,54 +311,54 @@ module HookProcAPI
       x, y = $buf.unpack('ll')
       dx = sx - x; dy = sy - y
       checkTSWsize()
-      left = $MAP_LEFT + dx; top = $MAP_TOP + dy; size = $SIZE * 11
+      left = $MAP_LEFT + dx; top = $MAP_TOP + dy; size = $TILE_SIZE * 11
       ClipCursor.call([left, top, left+size, top+size].pack('l4')) # confine cursor pos within map
 
-      x_pos = ((x - $MAP_LEFT) / $SIZE).floor
-      y_pos = ((y - $MAP_TOP) / $SIZE).floor
+      x_pos = ((x - $MAP_LEFT) / $TILE_SIZE).floor
+      y_pos = ((y - $MAP_TOP) / $TILE_SIZE).floor
 
-      break if (x_pos == $x_pos and y_pos == $y_pos) or isInEvent # same pos
+      break if x_pos == $x_pos and y_pos == $y_pos # same pos
+      if nCode != 'init' then break if isInEvent end # don't check this on init
 
       WRITE_PROCESS.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # TIMER1TIMER push ebx (re-enable)
       callFunc(TIMER1_ADDR) # elicit TIMER1TIMER
       if x_pos < 0 or x_pos > 10 or y_pos < 0 or y_pos > 10 # outside
-        SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, '')
+        if @itemAvail.empty? then showMsg(1, 2) else showMsg(3, 4) end
         $x_pos = $y_pos = -1 # cancel preview
         break
       end
       $x_pos = x_pos; $y_pos = y_pos
-      x_left = $MAP_LEFT + $SIZE*x_pos
-      y_top = $MAP_TOP + $SIZE*y_pos
+      x_left = $MAP_LEFT + $TILE_SIZE*x_pos
+      y_top = $MAP_TOP + $TILE_SIZE*y_pos
 
-READ_PROCESS.call_r($hPrc, OFFSET_FLOOR+BASE_ADDRESS, $buf, 4, 0)
-floor = $buf.unpack('L')[0]
-Connectivity.check_mag = false
-if floor > 40
-  READ_PROCESS.call_r($hPrc, OFFSET_SACREDSHIELD+BASE_ADDRESS, $buf, 4, 0)
-  Connectivity.check_mag = true if $buf.unpack('l')[0].zero?
-end
-READ_PROCESS.call_r($hPrc, OFFSET_MAP+floor*123+2+BASE_ADDRESS, $buf, 121, 0)
-$mapTiles = $buf.unpack('C121')
-READ_PROCESS.call_r($hPrc, OFFSET_XPOS+BASE_ADDRESS, $buf, 4, 0)
-ox = $buf.unpack('L')[0]
-READ_PROCESS.call_r($hPrc, OFFSET_YPOS+BASE_ADDRESS, $buf, 4, 0)
-oy = $buf.unpack('L')[0]
-@access = Connectivity.main(ox, oy, x_pos, y_pos)
-if @access
-  c_ind = 0
-else
-  c_ind = 2
-end
-cpt = Connectivity.points.size >> 1
-SET_COLOR.call($hDC, HIGHLIGHT_COLOR[c_ind])
+      ox = readMemoryDWORD(OFFSET_XPOS+BASE_ADDRESS)
+      oy = readMemoryDWORD(OFFSET_YPOS+BASE_ADDRESS)
+      @access = Connectivity.main(ox, oy, x_pos, y_pos)
+
+      if @access
+        c_ind = @access.zero? ? 0 : 1
+        cpt = Connectivity.points.size >> 1
+      else
+        c_ind = 2
+      end
+  
 # it is possible that when [WIN] key is released (and thus `unhookM` is called), `_msHook` is still running; in this case, do not do the following things:
-      SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, 'tswMP: Press alphabet/arrow key to use items' + (@access ? (' or click mouse to teleport to (%X,%X).' % [x_pos, y_pos]) : '.')) if @hmhook
-      BIT_BLT.call($hDC, x_left, y_top, $SIZE, $SIZE, $hDC, 0, 0, RASTER_DPO) if @hmhook
-POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access and cpt > 1
+      break unless @hmhook
+      if @access
+        showMsg(4, 1, x_pos, y_pos, @itemAvail.empty? ? '.' : STRINGS[6])
+      elsif @itemAvail.empty?
+        showMsg(1, 3, x_pos, y_pos)
+      else
+        showMsg(3, 4)
+      end
+      break unless @hmhook
+      SET_COLOR.call($hDC, HIGHLIGHT_COLOR[c_ind])
+      BIT_BLT.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, $hDC, 0, 0, RASTER_DPO)
+      if @access then POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if cpt > 1 end
 
       WRITE_PROCESS.call_r($hPrc, TIMER1_ADDR, "\xc3", 1, 0) if @hmhook # TIMER1TIMER ret (disable; freeze)
     end
-    return 0 if nCode == 'init' # upon pressing [WIN] without mouse move
+    return 1 if block or nCode == 'init' # upon pressing [WIN] without mouse move
     return CallNextHookEx.call(@hmhook, nCode, wParam, lParam)
   # no need to "rescue" here since the exceptions could be handled in _keyHook
   end
@@ -275,9 +370,12 @@ POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access
     block = false # block input?
     finally do
       break if nCode < 0 # do not process
-      if key == VK_LWIN or key == VK_RWIN
+      if key == VK_LWIN
         alphabet = false # alphabet key pressed?
         arrow = false # arrow key pressed?
+      elsif key == VK_ESCAPE
+        break if isSLActive
+        alphabet = arrow = false
       else
         break unless @winDown and wParam == WM_KEYDOWN
 
@@ -289,19 +387,16 @@ POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access
       end
       hWnd = GET_FGWIN.call
       if hWnd != $hWnd # TSW is not active
-        len = GetClassName.call(hWnd, $buf, 256)
-        if $buf[0, len]!='TTSW10'
-          abandon()
+        if getClassName(hWnd)!='TTSW10'
+          abandon(false)
           break
         end
         init # if another TSW is active now
       end
 
-      break if isButtonFocused and !@flying # maybe in the middle of an event
-
       block = true
       if wParam == WM_KEYDOWN
-        break if isInEvent
+        break if isInEvent # when holding [WIN] key, this (i.e. `isInEvent`) will automatically be called every ~50 msec (keyboard repeat delay)
         if alphabet and !@flying
           @winDown = false # de-active; restore
           unhookM
@@ -310,20 +405,20 @@ POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access
           if isButtonFocused # can use item successfully (so the don't-use button is focused now)
             callFunc(ITEMS['event_addr'][12]) if alphabet > 2 # buttonUseClick = click 'Use' (excluding OrbOfHero/Wisdom)
           else
-            SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, "tswMP: Could not use #{ITEMS['name'][alphabet]}!")
+            showMsgTxtbox(10, ITEMS['name'][alphabet])
           end
 
         elsif arrow
+          SET_BKCOLOR.call($hDC, HIGHLIGHT_COLOR[-2])
           if @flying # already flying: arrow keys=up/downstaris
             arrow >>= 1
             callFunc(ITEMS['event_addr'][2][arrow+2]) # click Down/Up
-            
-            SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, @flying)
+            showMsgTxtbox(8) if @flying == 2
             if @lastArrow != arrow
-              INVAL_RECT.call($hWnd, [(@lastArrow>0 ? 5 : 4)*$SIZE/2+$ORIGIN_X, $ORIGIN_Y, (@lastArrow.zero? ? 5 : 6)*$SIZE/2+$ORIGIN_X, $ORIGIN_Y+$SIZE].pack('l4'), 0)
-              sleep(0.05) if @lastArrow < 0
-              DRAW_TEXT_W.call($hDC, ["\xBC\x25", "\xB2\x25"][arrow], 1, [(4+arrow)*$SIZE/2+$ORIGIN_X, $ORIGIN_Y, (5+arrow)*$SIZE/2+$ORIGIN_X, $ORIGIN_Y+$SIZE].pack('l4'), arrow << 1)
-              BIT_BLT.call($hDC, (4+arrow)*$SIZE/2+$ORIGIN_X, $ORIGIN_Y, $SIZE/2, $SIZE, $hDC, 0, 0, RASTER_DPO)
+              INVAL_RECT.call($hWnd, $OrbFlyRect[@lastArrow], 0)
+              sleep(INTERVAL_DRAW) if @lastArrow < 0
+              DRAW_TEXT_W.call($hDC, ["\xBC\x25", "\xB2\x25"][arrow], 1, $OrbFlyRect[arrow], arrow << 1)
+              BIT_BLT.call($hDC, (4+arrow)*$TILE_SIZE/2+$ITEMSBAR_LEFT, $ITEMSBAR_TOP, $TILE_SIZE/2, $TILE_SIZE, $hDC, 0, 0, RASTER_DPO)
               @lastArrow = arrow
             end
           else
@@ -332,45 +427,29 @@ POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access
             callFunc(ITEMS['event_addr'][2][0]) # Image4Click (OrbOfFly)
             WRITE_PROCESS.call_r($hPrc, ITEMS['event_addr'][2][1], "\x0F\x85\xA2\0\0\0", 6, 0) if arrow == 3 # restore (JNZ)
             if isButtonFocused # can use OrbOfFly successfully (so the up/down/ok button is focused now)
-              @flying = (arrow == 3 ? '[CHEAT] ' : '') + 'tswMP: Use arrow keys to fly up/down; release [WIN] to confirm.'
-              SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, @flying)
+              @flying = (arrow == 3 ? 2 : 0) # cheat or not
+              showMsgTxtbox(8) if @flying == 2
               @lastArrow = -1
-              sleep(0.05)
-              DRAW_TEXT_W.call($hDC, "\xBC\x25\xB2\x25", 2, [2*$SIZE+$ORIGIN_X, $ORIGIN_Y, 3*$SIZE+$ORIGIN_X, $ORIGIN_Y+$SIZE].pack('l4'), 0) # U+25BC/25B2 = down/up triangle
-              SET_COLOR.call($hDC, HIGHLIGHT_COLOR[arrow == 3 ? 2 : 0])
-              BIT_BLT.call($hDC, 2*$SIZE+$ORIGIN_X, $ORIGIN_Y, $SIZE, $SIZE, $hDC, 0, 0, RASTER_DPO)
+              sleep(INTERVAL_DRAW)
+              DRAW_TEXT_W.call($hDC, "\xBC\x25\n\0\xB2\x25", 3, $OrbFlyRect[-1], 0) # U+25BC/25B2 = down/up triangle
+              SET_COLOR.call($hDC, HIGHLIGHT_COLOR[@flying])
+              BIT_BLT.call($hDC, 2*$TILE_SIZE+$ITEMSBAR_LEFT, $ITEMSBAR_TOP, $TILE_SIZE, $TILE_SIZE, $hDC, 0, 0, RASTER_DPO)
+              showMsg(@flying, 7)
             else
               @winDown = false
               len = SEND_MESSAGE.call($hWndText, WM_GETTEXT, 256, $buf)
-              SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, "tswMP: Could not use #{ITEMS['name'][2]}!") if len < 31 or len > 64 # otherwise, it's because "You must be near the stairs to fly!"
+              showMsgTxtbox(10, ITEMS['name'][2]) if len < 31 or len > 64 # otherwise, it's because "You must be near the stairs to fly!"
             end
           end
         elsif !@winDown # only trigger at the first time
           @winDown = true
           checkTSWsize
           hookM
-
-          @itemAvail = []
-          for i in 0..11 # check what items you have
-            READ_PROCESS.call_r($hPrc, ITEMS['address'][i], $buf, 4, 0)
-            next if $buf.unpack('L')[0] < 1
-            @itemAvail << i
-            y = ITEMS['position'][i]
-            x, y = y%3, y/3
-            x = x * $SIZE + $ORIGIN_X
-            y = y * $SIZE + $ORIGIN_Y
-            if i == 2
-              DRAW_TEXT_W.call($hDC, "\xBC\x25\xB2\x25", 2, [x, y, x+$SIZE, y+$SIZE].pack('l4'), 0) # U+25BC/25B2 = down/up triangle
-            else
-              DRAW_TEXT.call($hDC, ITEMS['key'][i].chr, 1, [x, y, x+$SIZE, y+$SIZE].pack('l4'), 0)
-            end
-            SET_COLOR.call($hDC, HIGHLIGHT_COLOR[3])
-            BIT_BLT.call($hDC, x, y, $SIZE, $SIZE, $hDC, 0, 0, RASTER_DPO)
-          end
-          _msHook('init', WM_MOUSEMOVE, 0) # upon pressing [WIN] without mouse move
+          drawItemsBar
+          _msHook('init', WM_MOUSEMOVE, 0) # do this subroutine once even without mouse move
         end
       elsif wParam == WM_KEYUP # (alphabet == false; arrow == false)
-        unless @winDown then block = false; break end # if somehow [WIN] key down signal is not intercepted, then do not block (otherwise [WIN] key will always be down)
+        block = false # if somehow [WIN] key down signal is not intercepted, then do not block (otherwise [WIN] key will always be down)
 
         callFunc(ITEMS['event_addr'][2][4]) if @flying # click OK
         abandon
@@ -396,7 +475,7 @@ POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access
   end
   def rehookK
     unhookK
-    abandon()
+    abandon
     hookK
   end
   def hookM
@@ -404,76 +483,96 @@ POLY_LINE.call($hDC, Connectivity.points.pack('l*'), cpt) if @hmhook and @access
     @hmhook = SetWindowsHookEx.call_r(WH_MOUSE_LL, MouseProc, @hMod, 0)
     return true
   end
-  def unhookM
-    return false unless @hmhook
+  def unhookM(noCheck=false)
+    return false unless @hmhook or noCheck
     UnhookWindowsHookEx.call(@hmhook)
     @hmhook = nil
 
     WRITE_PROCESS.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # TIMER1TIMER push ebx (restore; re-enable)
     $x_pos = $y_pos = -1
-    SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, '')
     INVAL_RECT.call($hWnd, $itemsRect, 0) # redraw item bar
+    INVAL_RECT.call($hWnd, $msgRect, 0) # clear message bar
     ClipCursor.call(nil) # do not confine cursor range
   end
   private :_msHook
   private :_keyHook
 end
 
+def showMsgTxtbox(textIndex, *argv)
+  SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, textIndex < 0 ? '' : STRINGS[textIndex] % argv)
+end
+def readMemoryDWORD(address)
+  READ_PROCESS.call_r($hPrc, address, $buf, 4, 0)
+  return $buf.unpack('l')[0]
+end
+def writeMemoryDWORD(address, dword)
+  WRITE_PROCESS.call_r($hPrc, address, [dword].pack('l'), 4, 0)
+end
+def callFunc(address) # execute the subroutine at the given address
+  writeMemoryDWORD(MIDSPEED_ADDR, address-MIDSPEED_ADDR-4)
+  SEND_MESSAGE.call($hWnd, WM_COMMAND, MIDSPEED_MENUID, 0)
+  writeMemoryDWORD(MIDSPEED_ADDR, MIDSPEED_ORIG) # restore
+end
 def preExit() # finalize
   HookProcAPI.unhookK
-  HookProcAPI.unhookM
+  HookProcAPI.unhookM(true)
   WRITE_PROCESS.call($hPrc, HELP_ADDR, "\x53\x8B\xD8\x6A\x05\x68", 7, 0) # restore the function of the help menu
   API.new('DeleteDC', 'L', 'L', 'gdi32').call($hDC)
   API.new('DeleteObject', 'L', 'L', 'gdi32').call_r($hPen)
   API.new('UnregisterHotKey', 'LI', 'L', 'user32').call(0, 0)
   API.new('CloseHandle', 'L', 'L', 'kernel32').call($hPrc)
 end
-def menuRefresh() # change the function of the help menu to "refresh"
-  flag = $autoRefresh ? 0xc3 : 0x90 # how this bytecode is set won't affect the outcome of asm code
-  # instead, this flag can tell tswKai if $autoRefresh is turned on/off here
-  WRITE_PROCESS.call_r($hPrc, HELP_ADDR, [0xe8, REFRESH_ADDR-HELP_ADDR-5, flag, 0xc3].pack('clcc'), 7, 0) # Help2Click -> call 454de8; ret; # syokidata2
-end
 def checkTSWsize()
   GET_RECT.call_r($hWnd, $buf)
   w, h = $buf[8, 8].unpack('ll')
   return if w == $W and h == $H
   $W, $H = w, h
-  $MAP_LEFT, $MAP_TOP = ($W*0.225).round, ($H*0.057).round # also in: dword_48c578; dword_48c57c
-  $ORIGIN_X, $ORIGIN_Y = ($W/44.5).round, ($H/2.21).round
-  $SIZE = ($W*0.025 + $H*0.0375).round
-  $itemsRect = [$ORIGIN_X, $ORIGIN_X, $ORIGIN_X+$SIZE*3, $ORIGIN_Y+$SIZE*5].pack('l4')
+
+  $MAP_LEFT = readMemoryDWORD(MAP_LEFT_ADDR)
+  $MAP_TOP = readMemoryDWORD(MAP_TOP_ADDR)
+  $ITEMSBAR_LEFT = readMemoryDWORD($IMAGE6+OFFSET_CTL_LEFT)
+  $ITEMSBAR_TOP = readMemoryDWORD($IMAGE6+OFFSET_CTL_TOP)
+  $TILE_SIZE = readMemoryDWORD($IMAGE6+OFFSET_CTL_WIDTH)
+#  $MAP_LEFT, $MAP_TOP = ($W*0.225).round, ($H*0.057).round
+#  $ITEMSBAR_LEFT, $ITEMSBAR_TOP = ($W/44.5).round, ($H/2.21).round
+#  $TILE_SIZE = ($W*0.025 + $H*0.0375).round
+
+  x1 = 2*$TILE_SIZE + $ITEMSBAR_LEFT
+  x2 = x1 + $TILE_SIZE/2
+  x3 = x1 + $TILE_SIZE
+  y1 = $ITEMSBAR_TOP+$TILE_SIZE
+
+  $itemsRect = [$ITEMSBAR_LEFT, $ITEMSBAR_TOP, x3, $ITEMSBAR_TOP+$TILE_SIZE*5].pack('l4')
+  $OrbFlyRect = [[x1, $ITEMSBAR_TOP, x2, y1].pack('l4'), [x2, $ITEMSBAR_TOP, x3, y1].pack('l4'), [x1, $ITEMSBAR_TOP, x3, y1].pack('l4')] # left(0), right(1), none(-1)
+  $msgRect = [0, $H-$MAP_TOP*2, $W-2, $H-$MAP_TOP].pack('l4')
 end
 def init()
-  $hWnd = FIND_WIN.call(0, 0, 'TTSW10', 0)
-  $pID = "\0\0\0\0"
-  $tID = GET_PID.call($hWnd, $pID)
-  $pID = $pID.unpack('L')[0]
+  $hWnd = FIND_WIN.call('TTSW10', 0)
+  $tID = GET_PID.call($hWnd, $buf)
+  $pID = $buf.unpack('L')[0]
   begin
     load('tswMPdebug.txt')
   rescue Exception
   end
-  raise("Cannot find the TSW process and/or window. Please check if\nTSW V1.2 is currently running. tswMP has stopped.\n\nAs an advanced option, you can manually assign $pID, $tID\nand $hWnd in `tswMPdebug.txt'.") if $hWnd.zero? or $pID.zero? or $tID.zero?
+  raise("Cannot find the TSW process and/or window. Please check if TSW V1.2 is currently running. tswMP has stopped.\n\nAs an advanced option, you can manually assign $pID, $tID and $hWnd in `tswMPdebug.txt'.") if $hWnd.zero? or $pID.zero? or $tID.zero?
   ATT_INPUT.call_r(GET_TID.call_r, $tID, 1) # This is necessary for GetFocus to work: 
   #https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getfocus#remarks
   $hPrc = OPEN_PROCESS.call_r(PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_VM_OPERATION, 0, $pID)
-  $hWndText = 0
-  width = 0
-  while width < 600 # find the status bar, whose width is always larger than 600 (to avoid mistakenly finding other textbox window)
-    $hWndText = FIND_WIN.call($hWnd, $hWndText, 'TEdit', 0)
-    if $hWndText.zero?
-      API.msgbox("tswMP failed to find the status bar at the bottom of the TSW window. Please check whether this is really a TSW process?\n\n\tPID=#{$pID}, hWND=#{$hWnd}\n\nHowever, tswMP will continue running anyway.", MB_ICONEXCLAMATION)
-      break
-    end
-    GET_RECT.call_r($hWndText, $buf)
-    width = $buf.unpack('l4')[2]
-  end
-  SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, "tswMP: Started. Found TSW running - pID=#{$pID}; hWnd=0x#{$hWnd.to_s(16).upcase}")
+  $TTSW = readMemoryDWORD(TTSW_ADDR)
+  $EDIT8 = readMemoryDWORD($TTSW+OFFSET_EDIT8)
+  $hWndText = readMemoryDWORD($EDIT8+OFFSET_HWND)
+  $IMAGE6 = readMemoryDWORD($TTSW+OFFSET_IMAGE6)
+
+  showMsgTxtbox(9, $pID, $hWnd)
 
   checkTSWsize
   $hDC = GET_DC.call_r($hWnd)
   SEL_OBJ.call_r($hDC, $hBr)
   SEL_OBJ.call_r($hDC, $hPen)
-  menuRefresh
+  SET_TEXTCOLOR.call($hDC, HIGHLIGHT_COLOR.last)
+  # change the function of the help menu to "refresh"
+  ##### THIS WILL BE DELETED IN THE FUTURE; tswKai SHOULD TAKE OVER THIS PART #####
+  WRITE_PROCESS.call_r($hPrc, HELP_ADDR, [0xe8, REFRESH_ADDR-HELP_ADDR-5, 0xc3].pack('clc'), 6, 0) # Help2Click -> call 454de8; ret; # syokidata2
 end
 
 $hBr = GET_OBJ.call_r(DC_BRUSH)
@@ -485,17 +584,7 @@ API.new('RegisterHotKey', 'LILL', 'L', 'user32').call_r(0, 0, MODIFIER, KEY)
 
 
 HookProcAPI.hookK
-API.msgbox("""tswMovePoint is running. Try pressing WinKey!
-When WinKey down:
-1) Move mouse to select a destination to teleport;
-2) Press specified alphabet key to use an item;
-3) Press left/right arrow key to use orb of flying;
-Then release WinKey to confirm. Other functions:
-
-F7 = Toggle auto-refresh (now is #{$autoRefresh ? "on" : "off"});
-F7 twice = Rehook keyboard if WinKey stops working;
-F1 = Manually refresh TSW status;
-Hold F7 = Quit tswMovePoint.""")
+API.msgbox(11)
 
 while true
   GET_MESSAGE.call($buf, 0, 0, 0)
@@ -511,18 +600,14 @@ while true
   diff = time - $time
   $time = time
 
-  if GET_FGWIN.call == $hWnd # only respond when TSW is focused
-    $autoRefresh = ! $autoRefresh
-    SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, 'tswMP: You turned TSW auto-fresh ' + ($autoRefresh ? 'on.' : 'off. You can press F1 to refresh manually.'))
-    menuRefresh
-  end
   if diff < INTERVAL_QUIT # hold
-    SEND_MESSAGE.call($hWndText, WM_SETTEXT, 0, '')
+    showMsgTxtbox(-1)
     break
   elsif diff < INTERVAL_REHOOK # twice
+    showMsgTxtbox(-1)
     HookProcAPI.rehookK
-    API.msgbox('Keyboard Re-hooked.')
+    API.msgbox(12)
   end
 end
 preExit
-API.msgbox('tswMovePoint has stopped.')
+API.msgbox(13)
