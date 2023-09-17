@@ -22,6 +22,5 @@ Double press F7 = Re-register hotkeys if they stop working;
 Hold F7 = Quit tswMovePoint.''',
 'Re-registered [WIN] and [TAB] hotkeys.',
 'tswMovePoint has stopped.',
-
 '.'
 ]
