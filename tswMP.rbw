@@ -293,13 +293,13 @@ module HookProcAPI
     $mapTiles = $buf.unpack(MAP_TYPE)
     ReadProcessMemory.call_r($hPrc, MONSTER_STATUS_ADDR, $buf, MONSTER_STATUS_LEN << 2, 0)
     $monStatus = $buf.unpack(MONSTER_STATUS_TYPE)
-    callFunc(TIMER1_ADDR) # twice is necessary for battle events (including once in `drawMapDmg`)
-    callFunc(TIMER1_ADDR) # thrice is necessary for dialog events (removal of richedit control)
     drawMapDmg(true) # reinit after an event happens
     Connectivity.floodfill($heroStatus[STATUS_INDEX[6]], $heroStatus[STATUS_INDEX[7]]) # x, y
   end
   def drawMapDmg(init)
     callFunc(TIMER1_ADDR) # elicit TIMER1TIMER
+    callFunc(TIMER1_ADDR) # twice is necessary for battle events
+    callFunc(TIMER1_ADDR) # thrice is necessary for dialog events (removal of richedit control) and refreshing hero xp position (disappear; ??; reappear)
     WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\xc3", 1, 0) # TIMER1TIMER ret (disable; freeze)
     SelectObject.call($hDC, $hGUIFont)
     SelectObject.call($hDC, $hPen2)
@@ -405,9 +405,6 @@ module HookProcAPI
         end
         # directly teleport to destination or somehow no event is triggered
         break unless @hmhook # stop drawing if WIN key is already released while this hooked function is still running
-
-        callFunc(TIMER1_ADDR)
-        callFunc(TIMER1_ADDR) # thrice is necessary for refreshing hero xp position (including once in `drawMapDmg`; disappear; ??; reappear)
         drawMapDmg(false) # since the map has already refreshed, the damage values on the map should be redrawn
         showMsg(cheat ? 2 : 0, 5, x, y, @itemAvail.empty? ? STRINGS[-1] : STRINGS[6])
         $mapTiles.map! {|i| if i.zero? then 6 elsif i < 0 then -i else i end} # revert previous graph coloring
@@ -438,9 +435,44 @@ module HookProcAPI
       break if x_pos == $x_pos and y_pos == $y_pos # same pos
       if nCode != 'init' then break if isInEvent end # don't check this on init
 
-      if @lastDraw # revert last drawing by XOR
-        WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # TIMER1TIMER push ebx (re-enable)
-        drawMapDmg(false)
+      if @lastDraw and @hmhook
+        cpt = @lastDraw.last
+        Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
+
+        writeMemoryDWORD(0x48c5d2, readMemoryDWORD(0x48c5d2) ^ 1) # byte_48c5d2: 0 or 1; the game displays 2 frame animation, and this byte determines which of the 2 frames is showing. This operation here reverts the last change of this byte
+        WriteProcessMemory.call_r($hPrc, 0x41d9d0, [0x6A, $TILE_SIZE, 0x6A, $TILE_SIZE, 0x68, @lastDraw[1]-$MAP_TOP, 0x68, @lastDraw[0]-$MAP_LEFT, "\x8B\xC3\xE8\xF3\x00\x00\x00\x8B\x40\x04\x50\x90\x90\x90\x90\x6A", $TILE_SIZE, 0x6A, $TILE_SIZE, 0x68, @lastDraw[1], 0x68, @lastDraw[0]].pack('c5lcla*c4lcl'), 43, 0)
+        WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # in TBitmap.draw, the game will StretchBlt a prerecorded TBitmap into TCanvas, with full map size ($TILE_SIZE*11), i.e., refresh the whole map. The trick here is to modify the size and position into just the last 1 modified tile, not the whole map
+        callFunc(TIMER1_ADDR)
+        WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\xc3", 1, 0) # TIMER1TIMER ret (disable; freeze)
+        WriteProcessMemory.call_r($hPrc, 0x41d9d0, "\x8B\x47\x18\x50\x8B\x47\x14\x50\x6A\x00\x6A\x00\x8B\xC3\xE8\xF5\x00\x00\x00\x8B\x40\x04\x50\x8B\x46\x0C\x2B\x46\x04\x50\x8B\x46\x08\x2B\x06\x50\x8B\x46\x04\x50\x8B\x06\x50", 43, 0) # now restore TBitmap.draw
+        # now that the last tile is restored, we still need to draw map damage on that tile
+        if Connectivity.destTile !=6 and Monsters.heroOrb
+          if Connectivity.destTile == 255 or (mID = Monsters.getMonsterID(Connectivity.destTile))
+            SelectObject.call($hDC, $hGUIFont)
+            SelectObject.call($hDC, $hPen2)
+            SetROP2.call($hDC, R2_COPYPEN)
+            y, x = Connectivity.destIndex.divmod(11)
+            if Connectivity.destTile == 255
+              dmg = Monsters.magAttacks[Connectivity.destIndex]
+              HookProcAPI.drawDmg(x, y, Monsters.normalize(dmg).to_s, nil, dmg >= Monsters.heroHP)
+            else
+              res = Monsters.monsters[mID]
+              dmg = res[0]
+              if dmg == STRINGS[-2]
+                danger = true
+              else
+                danger = (dmg >= Monsters.heroHP)
+                dmg = Monsters.normalize(dmg).to_s
+              end
+              cri = res[3][1]
+              cri = Monsters.normalize(cri).to_s if cri
+              drawDmg(x, y, dmg, cri, danger)
+            end
+            SetROP2.call($hDC, R2_XORPEN)
+            SelectObject.call($hDC, $hPen)
+            SelectObject.call($hDC, $hSysFont)
+          end
+        end
         @lastDraw=nil
       end
 
@@ -476,7 +508,7 @@ module HookProcAPI
       Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
       SetDCBrushColor.call($hDC, color)
       PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPo)
-      @lastDraw = true
+      @lastDraw = [x_left, y_top, cpt]
 
       id = Connectivity.destTile
       break unless @hmhook and Monsters.heroOrb and (m = Monsters.getMonsterID(id))

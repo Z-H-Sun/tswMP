@@ -12,11 +12,12 @@ module Connectivity
   class << self
     attr_reader :route
     attr_reader :destTile
+    attr_reader :destIndex
   end
 # note: in order to detect magic attacks (mark these floor tiles as impassible), need to call `Monsters.checkMap` beforehand
   module_function
   def main(tx, ty) # end point: (tx, ty)
-    t_index = 11*ty + tx
+    @destIndex = t_index = 11*ty + tx
     @destTile = $mapTiles[t_index]
     return nil if @destTile > 0 # inaccessible
     @destTile = -@destTile
