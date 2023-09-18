@@ -115,6 +115,7 @@ module Monsters
     for i in 0...121
       case $mapTiles[i].abs
       when 255
+        break unless @heroOrb
         dmg = @magAttacks[i]
         if dmg.nil? # unlikely, but let's add this new item into database
           $mapTiles[i] = 6 * ($mapTiles[i] <=> 0)

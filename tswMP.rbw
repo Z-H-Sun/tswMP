@@ -71,7 +71,7 @@ R2_WHITE = 16
 # Ternary Raster Operations
 RASTER_DPo = 0xFA0089
 RASTER_DPx = 0x5A0049
-HIGHLIGHT_COLOR = [0x22AA22, 0x22AAAA, 0x2222AA, 0xC07F40, 0x889988, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
+HIGHLIGHT_COLOR = [0x22AA22, 0x60A0C0, 0x2222FF, 0xC07F40, 0x889988, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
 case [''].pack('p').size
 when 4 # 32-bit ruby
   MSG_INFO_STRUCT = 'L7'
@@ -293,13 +293,13 @@ module HookProcAPI
     $mapTiles = $buf.unpack(MAP_TYPE)
     ReadProcessMemory.call_r($hPrc, MONSTER_STATUS_ADDR, $buf, MONSTER_STATUS_LEN << 2, 0)
     $monStatus = $buf.unpack(MONSTER_STATUS_TYPE)
+    callFunc(TIMER1_ADDR) # twice is necessary for battle events (including once in `drawMapDmg`)
+    callFunc(TIMER1_ADDR) # thrice is necessary for dialog events (removal of richedit control)
     drawMapDmg(true) # reinit after an event happens
     Connectivity.floodfill($heroStatus[STATUS_INDEX[6]], $heroStatus[STATUS_INDEX[7]]) # x, y
   end
   def drawMapDmg(init)
     callFunc(TIMER1_ADDR) # elicit TIMER1TIMER
-    callFunc(TIMER1_ADDR) # twice is necessary for battle events
-    callFunc(TIMER1_ADDR) # thrice is necessary for dialog events (removal of richedit control) and refreshing hero xp position (disappear; ??; reappear)
     WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\xc3", 1, 0) # TIMER1TIMER ret (disable; freeze)
     SelectObject.call($hDC, $hGUIFont)
     SelectObject.call($hDC, $hPen2)
@@ -405,6 +405,9 @@ module HookProcAPI
         end
         # directly teleport to destination or somehow no event is triggered
         break unless @hmhook # stop drawing if WIN key is already released while this hooked function is still running
+
+        callFunc(TIMER1_ADDR)
+        callFunc(TIMER1_ADDR) # thrice is necessary for refreshing hero xp position (including once in `drawMapDmg`; disappear; ??; reappear)
         drawMapDmg(false) # since the map has already refreshed, the damage values on the map should be redrawn
         showMsg(cheat ? 2 : 0, 5, x, y, @itemAvail.empty? ? STRINGS[-1] : STRINGS[6])
         $mapTiles.map! {|i| if i.zero? then 6 elsif i < 0 then -i else i end} # revert previous graph coloring
@@ -436,11 +439,9 @@ module HookProcAPI
       if nCode != 'init' then break if isInEvent end # don't check this on init
 
       if @lastDraw # revert last drawing by XOR
-        SetDCBrushColor.call($hDC, @lastDraw[0])
-        PatBlt.call($hDC, @lastDraw[1], @lastDraw[2], $TILE_SIZE, $TILE_SIZE, RASTER_DPx)
-        cpt = @lastDraw.last
-        Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
-        @lastDraw = nil
+        WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # TIMER1TIMER push ebx (re-enable)
+        drawMapDmg(false)
+        @lastDraw=nil
       end
 
       if x_pos < 0 or x_pos > 10 or y_pos < 0 or y_pos > 10 # outside
@@ -474,8 +475,8 @@ module HookProcAPI
       break unless @hmhook
       Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
       SetDCBrushColor.call($hDC, color)
-      PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPx)
-      @lastDraw = [color, x_left, y_top, cpt]
+      PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPo)
+      @lastDraw = true
 
       id = Connectivity.destTile
       break unless @hmhook and Monsters.heroOrb and (m = Monsters.getMonsterID(id))
