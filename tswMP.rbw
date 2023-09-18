@@ -35,6 +35,8 @@ SetDCBrushColor = API.new('SetDCBrushColor', 'LL', 'L', 'gdi32')
 SetTextColor = API.new('SetTextColor', 'LL', 'L', 'gdi32')
 SetBkColor = API.new('SetBkColor', 'LL', 'L', 'gdi32')
 SetBkMode = API.new('SetBkMode', 'LI', 'L', 'gdi32')
+SetROP2 = API.new('SetROP2', 'LI', 'L', 'gdi32')
+CreateFontIndirect = API.new('CreateFontIndirect', 'S', 'L','gdi32')
 RegisterHotKey = API.new('RegisterHotKey', 'LILL', 'L', 'user32')
 UnregisterHotKey = API.new('UnregisterHotKey', 'LI', 'L', 'user32')
 
@@ -55,16 +57,21 @@ DT_CENTER = 1
 DT_VCENTER = 4
 DT_SINGLELINE = 0x20
 DT_CENTERBOTH = DT_CENTER | DT_VCENTER | DT_SINGLELINE
+NONANTIALIASED_QUALITY = 3
+SYSTEM_FONT = 13
 PROCESS_VM_WRITE = 0x20
 PROCESS_VM_READ = 0x10
 PROCESS_VM_OPERATION = 0x8
 MB_ICONEXCLAMATION = 0x30
 MB_ICONASTERISK = 0x40
 MB_SETFOREGROUND = 0x10000
+R2_XORPEN = 7
+R2_COPYPEN = 13
+R2_WHITE = 16
 # Ternary Raster Operations
 RASTER_DPo = 0xFA0089
 RASTER_DPx = 0x5A0049
-HIGHLIGHT_COLOR = [0x22AA22, 0x60A0C0, 0x2222FF, 0xC07F40, 0x88BB99, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, background, foreground text (note: not RGB, but rather BGR)
+HIGHLIGHT_COLOR = [0x22AA22, 0x22AAAA, 0x2222AA, 0xC07F40, 0x889988, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
 case [''].pack('p').size
 when 4 # 32-bit ruby
   MSG_INFO_STRUCT = 'L7'
@@ -77,6 +84,7 @@ end
 BASE_ADDRESS = 0x400000
 OFFSET_EDIT8 = 0x1c8 # status bar textbox at bottom
 OFFSET_IMAGE6 = 0x254 # orb of hero
+OFFSET_MEMO123 = [0x3c8, 0x3cc, 0x3d0] # HP/ATK/DEF
 OFFSET_HWND = 0xc0
 # OFFSET_TIMER_ENABLED = 0x20
 OFFSET_CTL_LEFT = 0x24
@@ -166,6 +174,9 @@ module HookProcAPI
   ClipCursor = API.new('ClipCursor', 'S', 'I', 'user32')
   GetModuleHandle = API.new('GetModuleHandle', 'I', 'I', 'kernel32')
   RtlMoveMemory = API.new('RtlMoveMemory', 'PLI', 'I', 'kernel32')
+  BeginPath = API.new('BeginPath', 'L', 'L', 'gdi32')
+  EndPath = API.new('EndPath', 'L', 'L', 'gdi32')
+  StrokePath = API.new('StrokePath', 'L', 'L', 'gdi32')
 
   WH_KEYBOARD_LL = 13
   WH_MOUSE_LL = 14
@@ -184,6 +195,7 @@ module HookProcAPI
   @flying = nil # currently using OrbOfFly; active
   @error = nil # exception within hook callback function
   @lastArrow = 0 # which arrowkey pressed previously? -1: none; 0: left; 1: right
+  @lastDraw = nil # highlight and connecting polyline drawn before
 
   module_function
   def handleHookExceptions() # exception should not be raised until callback returned
@@ -255,7 +267,23 @@ module HookProcAPI
     $heroStatus = $buf.unpack(STATUS_TYPE)
     ReadProcessMemory.call_r($hPrc, ITEM_ADDR, $buf, ITEM_LEN << 2, 0)
     $heroItems = $buf.unpack(ITEM_TYPE)
+    hero = [$heroStatus[STATUS_INDEX[0]], $heroStatus[STATUS_INDEX[1]], $heroStatus[STATUS_INDEX[2]]] # hp/atk/def
     floor = $heroStatus[STATUS_INDEX[4]]
+    mFac = readMemoryDWORD(MONSTER_STATUS_FACTOR_ADDR) + 1
+    if mFac != 1
+      for i in 0..2
+        SendMessage.call($hWndMemo[i], WM_SETTEXT, 0, '%d.%02d' % (hero[i]*100/mFac).divmod(100))
+      end
+    end
+    Monsters.heroHP = hero[0]
+    Monsters.heroATK = hero[1]
+    Monsters.heroDEF = hero[2]
+    Monsters.statusFactor = mFac
+    Monsters.heroOrb = ($heroItems[ITEM_INDEX[2]]==1)
+    Monsters.cross = ($heroItems[ITEM_INDEX[5]]==1)
+    Monsters.dragonSlayer = ($heroItems[ITEM_INDEX[12]]==1)
+    Monsters.luckyGold = ($heroItems[ITEM_INDEX[16]]==1)
+
     if floor > 40
       Monsters.check_mag = readMemoryDWORD(SACREDSHIELD_ADDR).zero?
     else
@@ -263,10 +291,49 @@ module HookProcAPI
     end
     ReadProcessMemory.call_r($hPrc, MAP_ADDR+floor*123+2, $buf, 121, 0)
     $mapTiles = $buf.unpack(MAP_TYPE)
-    Monsters.checkMap()
+    ReadProcessMemory.call_r($hPrc, MONSTER_STATUS_ADDR, $buf, MONSTER_STATUS_LEN << 2, 0)
+    $monStatus = $buf.unpack(MONSTER_STATUS_TYPE)
+    drawMapDmg(true) # reinit after an event happens
     Connectivity.floodfill($heroStatus[STATUS_INDEX[6]], $heroStatus[STATUS_INDEX[7]]) # x, y
   end
+  def drawMapDmg(init)
+    callFunc(TIMER1_ADDR) # elicit TIMER1TIMER
+    callFunc(TIMER1_ADDR) # twice is necessary for battle events
+    callFunc(TIMER1_ADDR) # thrice is necessary for dialog events (removal of richedit control) and refreshing hero xp position (disappear; ??; reappear)
+    WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\xc3", 1, 0) # TIMER1TIMER ret (disable; freeze)
+    SelectObject.call($hDC, $hGUIFont)
+    SelectObject.call($hDC, $hPen2)
+    SetROP2.call($hDC, R2_COPYPEN)
+    Monsters.checkMap(init)
+    SetROP2.call($hDC, R2_XORPEN)
+    SelectObject.call($hDC, $hPen)
+    SelectObject.call($hDC, $hSysFont)
+  end
+  def drawDmg(x, y, dmg, cri, danger)
+    x = $MAP_LEFT+$TILE_SIZE*x + 1
+    y = $MAP_TOP+$TILE_SIZE*(y+1) - 15
+    if danger
+      SetTextColor.call($hDC, HIGHLIGHT_COLOR[2])
+      SetROP2.call($hDC, R2_WHITE)
+    end
+    BeginPath.call($hDC)
+    TextOut.call($hDC, x, y-12, cri, cri.size) if cri
+    TextOut.call($hDC, x, y, dmg, dmg.size)
+    EndPath.call($hDC)
+    StrokePath.call($hDC)
+# StrokeAndFillPath won't work well here because the inside of the path will also be framed (The pen will draw along the center of the frame. Why is there PS_INSIDEFRAME but no PS_OUTSIDE_FRAME? GDI+ can solve this very easily by pen.SetAlignment), making the texts difficult to read.
+# So FillPath or another TextOut must be called afterwards to overlay on top of the inside stroke
+# SaveDC and RestoreDC can be used to solve the issue that StrokePath or FillPath will discard the active path afterwards (not used here)
+# refer to: https://github.com/tpn/windows-graphics-programming-src/blob/master/Chapt_15/Text/TextDemo.cpp#L1858
+    TextOut.call($hDC, x, y-12, cri, cri.size) if cri
+    TextOut.call($hDC, x, y, dmg, dmg.size)
+    if danger
+      SetTextColor.call($hDC, HIGHLIGHT_COLOR.last)
+      SetROP2.call($hDC, R2_COPYPEN)
+    end
+  end
   def drawItemsBar()
+    @lastDraw = nil
     @itemAvail = []
     SetBkMode.call($hDC, 2) # opaque
     for i in 0..11 # check what items you have
@@ -331,14 +398,16 @@ module HookProcAPI
 
         checkTSWsize()
 
-        if @access != 0 and !cheat
+        @lastDraw = nil
+        unless cheat or @access.zero? # need to move 1 step
           callFunc(operation) # move to the destination and trigger the event
           break if isInEvent()
         end
         # directly teleport to destination or somehow no event is triggered
         break unless @hmhook # stop drawing if WIN key is already released while this hooked function is still running
-        $mapTiles.map! {|i| if i == 0 then 6 elsif i < 0 then -i else i end} # revert previous graph coloring
+        drawMapDmg(false) # since the map has already refreshed, the damage values on the map should be redrawn
         showMsg(cheat ? 2 : 0, 5, x, y, @itemAvail.empty? ? STRINGS[-1] : STRINGS[6])
+        $mapTiles.map! {|i| if i.zero? then 6 elsif i < 0 then -i else i end} # revert previous graph coloring
         Connectivity.floodfill($x_pos, $y_pos)
         break
       when WM_MOUSEMOVE
@@ -366,11 +435,18 @@ module HookProcAPI
       break if x_pos == $x_pos and y_pos == $y_pos # same pos
       if nCode != 'init' then break if isInEvent end # don't check this on init
 
-      WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\x53", 1, 0) # TIMER1TIMER push ebx (re-enable)
-      callFunc(TIMER1_ADDR) # elicit TIMER1TIMER
+      if @lastDraw # revert last drawing by XOR
+        SetDCBrushColor.call($hDC, @lastDraw[0])
+        PatBlt.call($hDC, @lastDraw[1], @lastDraw[2], $TILE_SIZE, $TILE_SIZE, RASTER_DPx)
+        cpt = @lastDraw.last
+        Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
+        @lastDraw = nil
+      end
+
       if x_pos < 0 or x_pos > 10 or y_pos < 0 or y_pos > 10 # outside
         if @itemAvail.empty? then showMsg(1, 2) else showMsg(3, 4) end
         $x_pos = $y_pos = -1 # cancel preview
+        @lastDraw = nil
         break
       end
 
@@ -398,9 +474,19 @@ module HookProcAPI
       break unless @hmhook
       Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
       SetDCBrushColor.call($hDC, color)
-      PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPo)
+      PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPx)
+      @lastDraw = [color, x_left, y_top, cpt]
 
-      WriteProcessMemory.call_r($hPrc, TIMER1_ADDR, "\xc3", 1, 0) if @hmhook # TIMER1TIMER ret (disable; freeze)
+      id = Connectivity.destTile
+      break unless @hmhook and Monsters.heroOrb and (m = Monsters.getMonsterID(id))
+      writeMemoryDWORD(CUR_MONSTER_ID_ADDR, m)
+      callFunc(SHOW_MONSTER_STATUS_ADDR)
+      data = Monsters.monsters[m]
+      if data.nil? # unlikely, but let's add this new item into database
+        data = Monsters.getStatus(m)
+        Monsters.monsters[m] = data
+      end
+      showMsgTxtbox(14, *Monsters.detail((m == 18 && id != 104), *data))
     end
     return 1 if block or nCode == 'init' # upon pressing [WIN] without mouse move
     return CallNextHookEx.call(@hmhook, nCode, wParam, lParam)
@@ -537,6 +623,11 @@ module HookProcAPI
     InvalidateRect.call($hWnd || 0, $itemsRect, 0) # redraw item bar
     InvalidateRect.call($hWnd || 0, $msgRect, 0) # clear message bar
     ClipCursor.call(nil) # do not confine cursor range
+    mFac = Monsters.statusFactor
+    return if mFac == 1 or !$hWndMemo
+    SendMessage.call($hWndMemo[0] || 0, WM_SETTEXT, 0, Monsters.heroHP.to_s)
+    SendMessage.call($hWndMemo[1] || 0, WM_SETTEXT, 0, Monsters.heroATK.to_s)
+    SendMessage.call($hWndMemo[2] || 0, WM_SETTEXT, 0, Monsters.heroDEF.to_s)
   end
   private :_msHook
   private :_keyHook
@@ -561,6 +652,8 @@ def preExit() # finalize
   HookProcAPI.unhookK
   HookProcAPI.unhookM(true)
   DeleteObject.call($hPen || 0)
+  DeleteObject.call($hPen2 || 0)
+  DeleteObject.call($hGUIFont || 0)
   ReleaseDC.call($hWnd || 0, $hDC || 0)
 ##### THIS WILL BE DELETED IN THE FUTURE; tswKai SHOULD TAKE OVER THIS PART #####
   WriteProcessMemory.call($hPrc || 0, HELP_ADDR, "\x53\x8B\xD8\x6A\x05\x68", 7, 0) # restore the function of the help menu
@@ -610,12 +703,16 @@ def init()
   edit8 = readMemoryDWORD($TTSW+OFFSET_EDIT8)
   $hWndText = readMemoryDWORD(edit8+OFFSET_HWND)
   $IMAGE6 = readMemoryDWORD($TTSW+OFFSET_IMAGE6)
+  $hWndMemo = []
+  OFFSET_MEMO123.each {|i| $hWndMemo.push(readMemoryDWORD(readMemoryDWORD($TTSW+i)+OFFSET_HWND))}
+
   showMsgTxtbox(9, $pID, $hWnd)
 
   checkTSWsize
   $hDC = GetDC.call_r($hWnd)
   SelectObject.call_r($hDC, $hBr)
   SelectObject.call_r($hDC, $hPen)
+  SetROP2.call_r($hDC, R2_XORPEN)
   SetBkColor.call($hDC, HIGHLIGHT_COLOR[-2])
   SetBkMode.call($hDC, 1) # transparent
   SetTextColor.call($hDC, HIGHLIGHT_COLOR.last)
@@ -624,8 +721,12 @@ def init()
   WriteProcessMemory.call_r($hPrc, HELP_ADDR, [0xe8, REFRESH_ADDR-HELP_ADDR-5, 0xc3].pack('clc'), 6, 0) # Help2Click -> call 454de8; ret; # syokidata2
 end
 
+$hGUIFont = CreateFontIndirect.call_r(DAMAGE_DISPLAY_FONT.pack('L5C8a32'))
+$hSysFont = GetStockObject.call_r(SYSTEM_FONT)
 $hBr = GetStockObject.call_r(DC_BRUSH)
 $hPen = CreatePen.call_r(0, 3, HIGHLIGHT_COLOR[4])
+$hPen2 = CreatePen.call_r(0, 3, HIGHLIGHT_COLOR[-2])
+
 init
 $time = 0
 $x_pos = $y_pos = -1
