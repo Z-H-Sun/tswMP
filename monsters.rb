@@ -7,41 +7,6 @@ MONSTER_STATUS_TYPE = 'L132'
 DAMAGE_DISPLAY_FONT = [16, 6, 0, 0, 700, 0, 0, 0, 0, 0, 0, NONANTIALIASED_QUALITY, 0, 'Tahoma']
 
 module Monsters
-=begin
-  MONSTERS = [[35, 18, 1, 1], # slime G
-  [45, 20, 2, 2], # slime R
-  [130, 60, 3, 8], # slime B
-  [35, 38, 3, 3], # bat
-  [60, 32, 8, 5], # priest
-  [100, 95, 30, 22], # high priest
-  [50, 48, 22, 12], # gateman C
-  [100, 180, 110, 100], # gateman B
-  [50, 42, 6, 6], # skeleton C
-  [55, 52, 12, 8], # skeleton B
-  [100, 65, 15, 30], # skeleton A
-  [60, 100, 8, 12], # big bat
-  [260, 85, 5, 18], # zombie
-  [320, 120, 15, 30], # zombie K
-  [20, 100, 68, 28], # rock
-  [8000, 5000, 1000, 500], # zeno (can also be 800/500/100 or 1000/625/125)
-  [230, 450, 100, 100], # sorcerer
-  [444, 199, 66, 144], # vampire
-  [1200, 180, 20, 50], # octopus (gold is 100 if index==104)
-  [1500, 600, 250, 800], # dragon
-  [120, 150, 50, 100], # G knight
-  [160, 230, 105, 65], # knight
-  [100, 680, 50, 55], # swordsman
-  [210, 200, 65, 45], # soldier
-  [220, 180, 30, 35], # G soldier
-  [320, 140, 20, 30], # slime man
-  [4500, 560, 310, 1000], # archsorcerer
-  [200, 390, 90, 50], # V bat
-  [360, 310, 20, 40], # slime K
-  [200, 380, 130, 90], # magician A
-  [220, 370, 110, 80], # magician B
-  [180, 430, 210, 120], # B knight
-  [180, 460, 360, 200]] # gateman A
-=end
   @check_mag = false # whether to check sorcerers and magicians
   @cross = false
   @dragonSlayer = false
@@ -89,7 +54,7 @@ module Monsters
     mDEF *= @statusFactor
     oneTurnDmg = mATK - @heroDEF
     oneTurnDmg = 0 if oneTurnDmg < 0
-    heroATKfactor = ((monster_id == 17 && @cross) || (monster_id == 19 && @dragonSlayer)) ? 2 : 1
+    heroATKfactor = (((monster_id == 17 || monster_id == 12 || monster_id == 13) && @cross) || (monster_id == 19 && @dragonSlayer)) ? 2 : 1
     diff = @heroATK - mDEF
     if diff <= 0 # the condition should have been `oneTurnDmg2Mon <= 0`, but in TSW, when you battle with vampire / dragon, even with Cross / DragonSlayer, you will not be able to attack it if your ATK <= its DEF, despite that your ATK*2 > its DEF
       dmg = turnsCount = STRINGS[-2]
@@ -115,10 +80,11 @@ module Monsters
     for i in 0...121
       case $mapTiles[i].abs
       when 255
+        break unless @heroOrb
         dmg = @magAttacks[i]
         if dmg.nil? # unlikely, but let's add this new item into database
-          $mapTiles[i] = 6 * ($mapTiles[i] <=> 0)
-          getMagDmg(i)
+          sign = $mapTiles[i] <=> 0
+          $mapTiles[i] = 6; getMagDmg(i); $mapTiles[i] *= sign
         else
           y, x = i.divmod(11)
           HookProcAPI.drawDmg(x, y, normalize(dmg).to_s, nil, dmg >= @heroHP)
@@ -132,10 +98,10 @@ module Monsters
   end
   def getMagDmg(i) # i = 11*y + x
     y, x = i.divmod(11)
-    left  = (x >  0) ? getMonsterID($mapTiles[i -  1]) : nil
-    right = (x < 10) ? getMonsterID($mapTiles[i +  1]) : nil
-    up    = (y >  0) ? getMonsterID($mapTiles[i - 11]) : nil
-    down  = (y < 10) ? getMonsterID($mapTiles[i + 11]) : nil
+    left  = (x >  0) ? getMonsterID($mapTiles[i -  1].abs) : nil
+    right = (x < 10) ? getMonsterID($mapTiles[i +  1].abs) : nil
+    up    = (y >  0) ? getMonsterID($mapTiles[i - 11].abs) : nil
+    down  = (y < 10) ? getMonsterID($mapTiles[i + 11].abs) : nil
     dmg1 = 0
     if (left == 16 && right == 16) || (up == 16 && down == 16) # flanked by sorcerers
       $mapTiles[i] = 255
@@ -159,7 +125,7 @@ module Monsters
     HookProcAPI.drawDmg(x, y, normalize(dmg1).to_s, nil, dmg1 >= @heroHP)
   end
   def getMonDmg(i)
-    mID = getMonsterID($mapTiles[i])
+    mID = getMonsterID($mapTiles[i].abs)
     return unless mID
 
     y, x = i.divmod(11)

@@ -7,7 +7,7 @@ SACREDSHIELD_ADDR = 0xb872c + BASE_ADDRESS
 module Connectivity
   @queue = []
   @ancestor = Array.new(121) # for each position, record its parent position (where it is moved from)
-  @route = []
+  @route = nil
   @destTile = 0
   class << self
     attr_reader :route
@@ -16,6 +16,7 @@ module Connectivity
 # note: in order to detect magic attacks (mark these floor tiles as impassible), need to call `Monsters.checkMap` beforehand
   module_function
   def main(tx, ty) # end point: (tx, ty)
+    @route = nil # clear last route
     t_index = 11*ty + tx
     @destTile = $mapTiles[t_index]
     return nil if @destTile > 0 # inaccessible
@@ -73,32 +74,3 @@ module Connectivity
     @ancestor[index2] = index
   end
 end
-
-=begin
-# DFS algorithm instead of BFS:
-  def main(ox, oy) # starting point: (ox, oy); end point: ($x_pos, $y_pos)
-    index = 11*oy + ox
-    $mapTiles[index] = 6 # do not consider the origin point; set as floor
-    $found = nil
-    floodFill(index)
-    if $found
-      $found = 0 if $mapTiles[11*$y_pos + $x_pos] == 6 # no need to involve one additional move if the destination is floor
-    end
-    return $found
-  end
-  def floodFill(index) # index = 11*y + x
-    return if $found # stop searching
-    return if $mapTiles[index] != 6
-    $mapTiles[index] = 0
-    y, x = index.divmod(11)
-    dx = x - $x_pos; dy = y - $y_pos
-    if dx.abs + dy.abs < 2 # 0 0 or 0 +-1 or +-1 0
-      $found = dx | (dy << 1) # should go -2: down; -1:right; 0: X; 1:left; 2: up
-      return
-    end
-    floodFill(index -  1) if x > 0
-    floodFill(index +  1) if x < 10
-    floodFill(index - 11) if y > 0
-    floodFill(index + 11) if y < 10
-  end
-=end

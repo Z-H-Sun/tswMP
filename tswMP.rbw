@@ -19,12 +19,16 @@ DrawTextW = API.new('DrawTextW', 'LSIPL', 'L', 'user32') # unicode
 TextOut = API.new('TextOut', 'LLLSL', 'L', 'gdi32')
 Polyline = API.new('Polyline', 'LSI', 'L', 'gdi32')
 PatBlt = API.new('PatBlt', 'LLLLLL', 'L', 'gdi32')
+BitBlt = API.new('BitBlt', 'LLLLLLLLL', 'L', 'gdi32')
 InvalidateRect = API.new('InvalidateRect', 'LPL', 'L', 'user32')
 GetFocus = API.new('GetFocus', 'V', 'L', 'user32')
 GetForegroundWindow = API.new('GetForegroundWindow', 'V', 'L', 'user32')
 SetForegroundWindow = API.new('SetForegroundWindow', 'L', 'L', 'user32')
 GetCursorPos = API.new('GetCursorPos', 'P', 'L', 'user32')
 ScreenToClient = API.new('ScreenToClient', 'LP', 'L', 'user32')
+CreateCompatibleBitmap = API.new('CreateCompatibleBitmap', 'LII', 'L', 'gdi32')
+CreateCompatibleDC = API.new('CreateCompatibleDC', 'L', 'L', 'gdi32')
+DeleteDC = API.new('DeleteDC', 'L', 'L', 'gdi32')
 GetDC = API.new('GetDC', 'L', 'L', 'user32')
 ReleaseDC = API.new('ReleaseDC', 'LL', 'L', 'user32')
 CreatePen = API.new('CreatePen', 'IIL', 'L', 'gdi32')
@@ -69,9 +73,10 @@ R2_XORPEN = 7
 R2_COPYPEN = 13
 R2_WHITE = 16
 # Ternary Raster Operations
+RASTER_S = 0xCC0020
 RASTER_DPo = 0xFA0089
 RASTER_DPx = 0x5A0049
-HIGHLIGHT_COLOR = [0x22AA22, 0x22AAAA, 0x2222AA, 0xC07F40, 0x889988, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
+HIGHLIGHT_COLOR = [0x22AA22, 0x60A0C0, 0x2222FF, 0xC07F40, 0x889988, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
 case [''].pack('p').size
 when 4 # 32-bit ruby
   MSG_INFO_STRUCT = 'L7'
@@ -435,11 +440,9 @@ module HookProcAPI
       break if x_pos == $x_pos and y_pos == $y_pos # same pos
       if nCode != 'init' then break if isInEvent end # don't check this on init
 
-      if @lastDraw # revert last drawing by XOR
-        SetDCBrushColor.call($hDC, @lastDraw[0])
-        PatBlt.call($hDC, @lastDraw[1], @lastDraw[2], $TILE_SIZE, $TILE_SIZE, RASTER_DPx)
-        cpt = @lastDraw.last
-        Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
+      if @lastDraw # undo the last drawing
+        if (r = Connectivity.route) then Polyline.call($hDC, r.pack('l*'), r.size >> 1) end # the trick is to XOR twice to restore the previous pixels
+        BitBlt.call($hDC, @lastDraw[0], @lastDraw[1], $TILE_SIZE, $TILE_SIZE, $hMemDC, 0, 0, RASTER_S) # read bitmap from memory DC
         @lastDraw = nil
       end
 
@@ -459,11 +462,9 @@ module HookProcAPI
       break unless @hmhook
       if @access
         color = HIGHLIGHT_COLOR[@access.zero? ? 0 : 1]
-        cpt = Connectivity.route.size >> 1
         showMsg(4, 1, x_pos, y_pos, @itemAvail.empty? ? STRINGS[-1] : STRINGS[6])
       else
         color = HIGHLIGHT_COLOR[2]
-        cpt = 0
         if @itemAvail.empty?
           showMsg(1, 3, x_pos, y_pos)
         else
@@ -472,10 +473,11 @@ module HookProcAPI
       end
 
       break unless @hmhook
-      Polyline.call($hDC, Connectivity.route.pack('l*'), cpt) if cpt > 1
+      BitBlt.call($hMemDC, 0, 0, $TILE_SIZE, $TILE_SIZE, $hDC, x_left, y_top, RASTER_S) # store the current bitmap for future redraw
+      if (r = Connectivity.route) then Polyline.call($hDC, r.pack('l*'), r.size >> 1) end
       SetDCBrushColor.call($hDC, color)
-      PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPx)
-      @lastDraw = [color, x_left, y_top, cpt]
+      PatBlt.call($hDC, x_left, y_top, $TILE_SIZE, $TILE_SIZE, RASTER_DPo)
+      @lastDraw = [x_left, y_top]
 
       id = Connectivity.destTile
       break unless @hmhook and Monsters.heroOrb and (m = Monsters.getMonsterID(id))
@@ -654,6 +656,8 @@ def preExit() # finalize
   DeleteObject.call($hPen || 0)
   DeleteObject.call($hPen2 || 0)
   DeleteObject.call($hGUIFont || 0)
+  DeleteObject.call($hBMP || 0)
+  DeleteDC.call($hMemDC || 0)
   ReleaseDC.call($hWnd || 0, $hDC || 0)
 ##### THIS WILL BE DELETED IN THE FUTURE; tswKai SHOULD TAKE OVER THIS PART #####
   WriteProcessMemory.call($hPrc || 0, HELP_ADDR, "\x53\x8B\xD8\x6A\x05\x68", 7, 0) # restore the function of the help menu
@@ -685,6 +689,8 @@ def checkTSWsize()
   $msgRect = [0, $H-$MAP_TOP*2, $W-2, $H-$MAP_TOP].pack('l4')
 end
 def init()
+  DeleteObject.call($hBMP || 0)
+  DeleteDC.call($hMemDC || 0)
   ReleaseDC.call($hWnd || 0, $hDC || 0)
   CloseHandle.call($hPrc || 0)
 
@@ -710,8 +716,11 @@ def init()
 
   checkTSWsize
   $hDC = GetDC.call_r($hWnd)
+  $hMemDC = CreateCompatibleDC.call_r($hDC)
+  $hBMP = CreateCompatibleBitmap.call_r($hDC, 40, 40)
   SelectObject.call_r($hDC, $hBr)
   SelectObject.call_r($hDC, $hPen)
+  SelectObject.call_r($hMemDC, $hBMP)
   SetROP2.call_r($hDC, R2_XORPEN)
   SetBkColor.call($hDC, HIGHLIGHT_COLOR[-2])
   SetBkMode.call($hDC, 1) # transparent
