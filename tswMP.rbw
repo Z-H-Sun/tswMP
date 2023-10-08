@@ -1,7 +1,11 @@
+#!/usr/bin/env ruby
+# encoding: ASCII-8Bit
+
 require 'win32/api'
 include Win32
 GetMessage = API.new('GetMessage', 'PLLL', 'L', 'user32')
-SendMessage = API.new('SendMessage', 'LLLP', 'L', 'user32')
+SendMessage = API.new('SendMessage', 'LLLP', 'L', 'user32') # ansi
+SendMessageW = API.new('SendMessageW', 'LLLP', 'L', 'user32') # unicode
 GetClientRect = API.new('GetClientRect', 'LP', 'L', 'user32')
 FillRect = API.new('FillRect', 'LSL', 'L', 'user32')
 OpenProcess = API.new('OpenProcess', 'LLL', 'L', 'kernel32')
@@ -11,12 +15,18 @@ CloseHandle = API.new('CloseHandle', 'L', 'L', 'kernel32')
 GetCurrentThreadId = API.new('GetCurrentThreadId', 'V', 'I', 'kernel32')
 GetWindowThreadProcessId = API.new('GetWindowThreadProcessId', 'LP', 'L', 'user32')
 AttachThreadInput = API.new('AttachThreadInput', 'III', 'I', 'user32')
-MessageBox = API.new('MessageBox', 'LSSI', 'L', 'user32')
+MessageBox = API.new('MessageBoxA', 'LSSI', 'L', 'user32')
+MessageBoxW = API.new('MessageBoxW', 'LSSI', 'L', 'user32')
 IsWindow = API.new('IsWindow', 'L', 'L', 'user32')
 FindWindow = API.new('FindWindow', 'SL', 'L', 'user32')
-DrawText = API.new('DrawTextA', 'LSIPL', 'L', 'user32') # ansi
-DrawTextW = API.new('DrawTextW', 'LSIPL', 'L', 'user32') # unicode
-TextOut = API.new('TextOut', 'LLLSL', 'L', 'gdi32')
+GetLastActivePopup = API.new('GetLastActivePopup', 'L', 'L', 'user32')
+ShowWindow = API.new('ShowWindow', 'LI', 'L', 'user32')
+EnableWindow = API.new('EnableWindow', 'LI', 'L', 'user32')
+UpdateWindow = API.new('UpdateWindow', 'L', 'L', 'user32')
+DrawText = API.new('DrawTextA', 'LSIPL', 'L', 'user32')
+DrawTextW = API.new('DrawTextW', 'LSIPL', 'L', 'user32')
+TextOut = API.new('TextOutA', 'LLLSL', 'L', 'gdi32')
+TextOutW = API.new('TextOutW', 'LLLSL', 'L', 'gdi32')
 Polyline = API.new('Polyline', 'LSI', 'L', 'gdi32')
 PatBlt = API.new('PatBlt', 'LLLLLL', 'L', 'gdi32')
 BitBlt = API.new('BitBlt', 'LLLLLLLLL', 'L', 'gdi32')
@@ -44,8 +54,10 @@ CreateFontIndirect = API.new('CreateFontIndirect', 'S', 'L','gdi32')
 RegisterHotKey = API.new('RegisterHotKey', 'LILL', 'L', 'user32')
 UnregisterHotKey = API.new('UnregisterHotKey', 'LI', 'L', 'user32')
 
+SW_SHOW = 4 # SHOWNOACTIVATE
 WM_SETTEXT = 0xC
 WM_GETTEXT = 0xD
+WM_GETTEXTLENGTH = 0xE
 WM_COMMAND = 0x111
 WM_HOTKEY = 0x312
 VK_LWIN = 0x5B
@@ -66,6 +78,7 @@ SYSTEM_FONT = 13
 PROCESS_VM_WRITE = 0x20
 PROCESS_VM_READ = 0x10
 PROCESS_VM_OPERATION = 0x8
+MB_ICONERROR = 0x10
 MB_ICONEXCLAMATION = 0x30
 MB_ICONASTERISK = 0x40
 MB_SETFOREGROUND = 0x10000
@@ -86,11 +99,13 @@ else
   raise 'Unsupported system or ruby version (neither 32-bit or 64-bit).'
 end
 
+TSW_CLS_NAME = 'TTSW10'
 BASE_ADDRESS = 0x400000
 OFFSET_EDIT8 = 0x1c8 # status bar textbox at bottom
 OFFSET_IMAGE6 = 0x254 # orb of hero
 OFFSET_MEMO123 = [0x3c8, 0x3cc, 0x3d0] # HP/ATK/DEF
 OFFSET_HWND = 0xc0
+OFFSET_OWNER_HWND = 0x20
 # OFFSET_TIMER_ENABLED = 0x20
 OFFSET_CTL_LEFT = 0x24
 OFFSET_CTL_TOP = 0x28
@@ -108,6 +123,8 @@ REFRESH_XYPOS_ADDR = 0x42c38 + BASE_ADDRESS # TTSW10.mhyouji
 TIMER1_ADDR = 0x43120 + BASE_ADDRESS
 TIMER2_ADDR = 0x5265c + BASE_ADDRESS
 TTSW_ADDR = 0x8c510 + BASE_ADDRESS
+TAPPLICATION_ADDR = 0x8a6f8 + BASE_ADDRESS
+POINTER_ANSI_STR_ADDR = 0x8c5d4 + BASE_ADDRESS
 MAP_LEFT_ADDR = 0x8c578 + BASE_ADDRESS
 MAP_TOP_ADDR = 0x8c57c + BASE_ADDRESS
 MOVE_ADDR = [0x84c58+BASE_ADDRESS, 0x84c04+BASE_ADDRESS, 0x84bb0+BASE_ADDRESS, 0x84b5c+BASE_ADDRESS] # down/right/left/up
@@ -133,42 +150,62 @@ MP_KEY1 = VK_LWIN
 MP_KEY2 = VK_TAB # hotkeys for teleportation and using items
 INTERVAL_REHOOK = 450 # the interval for rehook (in msec)
 INTERVAL_QUIT = 50 # for quit (in msec)
-INTERVAL_DRAW = 0.010 # draw the item bar after this interval (in sec); without this interval, the game window may redraw during this time which will mess up with our drawing
+
+$MPshowMapDmg = true # whether to enable enhanced damage display
+$buf = "\0" * 640
 
 require './connectivity'
 require './strings'
 
-$buf = "\0" * 640
-
 module Win32
   class API
-    def self.msgbox(text, flag=MB_ICONASTERISK)
-      text = STRINGS[text] if text.is_a?(Integer)
+    def self.focusTSW()
+      hWnd = GetLastActivePopup.call($hWndTApp) # there is a popup child
+      ShowWindow.call($hWndTApp, SW_SHOW) # this will restore the window if it was minimized
+      hWnd = $hWnd if hWnd == $hWndTApp
+      SetForegroundWindow.call(hWnd) # SetForegroundWindow for $hWndTApp can also achieve similar effect, but can sometimes complicate the situation, e.g., LastActivePopup will be $hWndTApp if no mouse/keyboard input afterwards
+# by the way, SetForegroundWindow for $hWnd can cause some very serious side effect:
+# it will trigger TTSW10.OnActivate=TTSW10.formactivate subroutine
+# which will show prolog animation and restart the game! (can change the first opcode `push ebp` to `ret` to avoid)
+      return hWnd
+    end
+    def self.msgbox(text, flag=MB_ICONASTERISK, api=MessageBox, title='tswMP')
       if IsWindow.call($hWnd || 0).zero?
-        $hWnd = 0 # if the window has gone, create a system level msgbox
+        hWnd = $hWnd = 0 # if the window has gone, create a system level msgbox
       else
-        SetForegroundWindow.call($hWnd)
+        hWnd = focusTSW() # if there is a popup child, use that as parent window
+# because if use $hWnd as parent in such cases, the main window will be activated,
+# causing a) the popup window losing focus and b) the adverse effect discussed earlier
       end
-      return MessageBox.call($hWnd, text[0, 1023], 'tswMP', flag | MB_SETFOREGROUND) # can't show too long message
+      return api.call(hWnd, text, title, flag | MB_SETFOREGROUND)
     end
     def call_r(*argv) # provide more info if a win32api returns null
       r = call(*argv)
       return r unless r.zero?
       err = '0x%04X' % API.last_error
       case function_name
-      when 'WriteProcessMemory', 'ReadProcessMemory'
-        reason = "Cannot read from / write to the TSW process. Please check if TSW V1.2 is running with pID=#{$pID} and if you have proper permissions."
-      when 'OpenProcess'
-        reason = "Cannot open the TSW process for writing. Please check if TSW V1.2 is running with pID=#{$pID} and if you have proper permissions."
+      when 'OpenProcess', 'WriteProcessMemory', 'ReadProcessMemory', 'VirtualAllocEx'
+        reason = "Cannot open / read from / write to / alloc memory for the TSW process. Please check if TSW V1.2 is running with pID=#{$pID} and if you have proper permissions."
       when 'RegisterHotKey'
         reason = "Cannot register hotkey. It might be currently occupied by other processes or another instance of tswMP. Please close them to avoid confliction. Default: F7 (0+ 118); current: (#{MODIFIER}+ #{KEY}). As an advanced option, you can manually assign `MODIFIER` and `KEY` in `tswMPdebug.txt'."
       else
         reason = "This is a fatal error. That is all we know."
       end
-      raise("Err #{err} when calling `#{effective_function_name}'@#{dll_name}.\n#{reason} tswMP has stopped. Details are as follows:\n\nPrototype='#{prototype.join('')}', ReturnType='#{return_type}', ARGV=#{argv.inspect}")
+      raise_r("Err #{err} when calling `#{effective_function_name}'@#{dll_name}.\n#{reason} tswMP has stopped. Details are as follows:\n\nPrototype='#{prototype.join('')}', ReturnType='#{return_type}', ARGV=#{argv.inspect}")
     end
   end
 end
+unless $Exerb # EXERB GUI has its own error handler window
+  alias :_raise :raise
+  def raise(*argv)
+    _raise(*argv)
+  rescue Exception
+    API.msgbox("#{$!.inspect}\n\n#{$@.join "\n"}"[0, 1023], MB_ICONERROR) # can't show too long message
+  ensure
+    exit
+  end
+end
+
 # https://github.com/ffi/ffi/issues/283#issuecomment-24902987
 # https://github.com/undees/yesbut/blob/master/2008-11-13/hook.rb
 module HookProcAPI
@@ -205,8 +242,7 @@ module HookProcAPI
   module_function
   def handleHookExceptions() # exception should not be raised until callback returned
     return if @error.nil?
-    preExit
-    raise @error
+    raise_r @error
   end
   def finally # code block wrapper
     yield
@@ -242,11 +278,10 @@ module HookProcAPI
     elsif @lastIsInEvent # result is false and @lastIsInEvent is true
       if @hmhook # just waited an event over; redraw items bar and map damage
         callFunc(TIMER2_ADDR) # immediately call TIMER2TIMER. Normally, the timer2 will wait 300 msec, then run once (i.e. will disable itself after the first run), where it will call `TTSW10.itemlive (which ends the in-event status)`. This will enforce redrawing the window, which will mess up with our drawing. So we will call it by ourselves without the 300 ms delay; then begin drawing
-        t = Time.now
+        InvalidateRect.call($hWnd, $itemsRect, 0) # redraw item bar
+        UpdateWindow.call($hWnd) # update immediately to clear the invalidated rect
         recalcStatus
-        t = INTERVAL_DRAW - (Time.now - t)
-        sleep(t) if t > 0
-        drawItemsBar
+        drawItemsBar # before this, UpdateWindow must be called; otherwise, the TSW's own redrawing process (caused by `itemlive`) may clear the drawing here
         @lastIsInEvent = false
         _msHook('init', WM_MOUSEMOVE, 0) # continue teleportation
       else
@@ -255,11 +290,6 @@ module HookProcAPI
       end
     end
     return result
-  end
-  def showMsg(colorIndex, textIndex, *argv)
-    SetDCBrushColor.call($hDC, HIGHLIGHT_COLOR[colorIndex])
-    FillRect.call($hDC, $msgRect, $hBr)
-    DrawText.call($hDC, STRINGS[textIndex] % argv, -1, $msgRect, DT_CENTERBOTH)
   end
   def abandon(force=true)
     unhookM(force)
@@ -284,7 +314,7 @@ module HookProcAPI
     Monsters.heroATK = hero[1]
     Monsters.heroDEF = hero[2]
     Monsters.statusFactor = mFac
-    Monsters.heroOrb = ($heroItems[ITEM_INDEX[2]]==1)
+    Monsters.heroOrb = $MPshowMapDmg && ($heroItems[ITEM_INDEX[2]]==1)
     Monsters.cross = ($heroItems[ITEM_INDEX[5]]==1)
     Monsters.dragonSlayer = ($heroItems[ITEM_INDEX[12]]==1)
     Monsters.luckyGold = ($heroItems[ITEM_INDEX[16]]==1)
@@ -317,13 +347,15 @@ module HookProcAPI
   def drawDmg(x, y, dmg, cri, danger)
     x = $MAP_LEFT+$TILE_SIZE*x + 1
     y = $MAP_TOP+$TILE_SIZE*(y+1) - 15
+    dmg_u = Str.utf8toWChar(dmg)
+    dmg_s = Str.strlen()
     if danger
       SetTextColor.call($hDC, HIGHLIGHT_COLOR[2])
       SetROP2.call($hDC, R2_WHITE)
     end
     BeginPath.call($hDC)
     TextOut.call($hDC, x, y-12, cri, cri.size) if cri
-    TextOut.call($hDC, x, y, dmg, dmg.size)
+    TextOutW.call($hDC, x, y, dmg_u, dmg_s)
     EndPath.call($hDC)
     StrokePath.call($hDC)
 # StrokeAndFillPath won't work well here because the inside of the path will also be framed (The pen will draw along the center of the frame. Why is there PS_INSIDEFRAME but no PS_OUTSIDE_FRAME? GDI+ can solve this very easily by pen.SetAlignment), making the texts difficult to read.
@@ -331,7 +363,7 @@ module HookProcAPI
 # SaveDC and RestoreDC can be used to solve the issue that StrokePath or FillPath will discard the active path afterwards (not used here)
 # refer to: https://github.com/tpn/windows-graphics-programming-src/blob/master/Chapt_15/Text/TextDemo.cpp#L1858
     TextOut.call($hDC, x, y-12, cri, cri.size) if cri
-    TextOut.call($hDC, x, y, dmg, dmg.size)
+    TextOutW.call($hDC, x, y, dmg_u, dmg_s)
     if danger
       SetTextColor.call($hDC, HIGHLIGHT_COLOR.last)
       SetROP2.call($hDC, R2_COPYPEN)
@@ -408,12 +440,12 @@ module HookProcAPI
           callFunc(operation) # move to the destination and trigger the event
           break if isInEvent()
         end
-        # directly teleport to destination or somehow no event is triggered
+        # directly teleport to destination or somehow no event is triggered (e.g. ATK too low)
         break unless @hmhook # stop drawing if WIN key is already released while this hooked function is still running
         drawMapDmg(false) # since the map has already refreshed, the damage values on the map should be redrawn
-        showMsg(cheat ? 2 : 0, 5, x, y, @itemAvail.empty? ? STRINGS[-1] : STRINGS[6])
+        showMsg(cheat ? 2 : 0, 5, x, y, @itemAvail.empty? ? $str::STRINGS[-1] : $str::STRINGS[6])
         $mapTiles.map! {|i| if i.zero? then 6 elsif i < 0 then -i else i end} # revert previous graph coloring
-        Connectivity.floodfill($x_pos, $y_pos)
+        Connectivity.floodfill(x, y) # if event is not triggered, then the current coordinate is (x, y) not ($x_pos, $y_pos)!
         break
       when WM_MOUSEMOVE
       else
@@ -462,7 +494,7 @@ module HookProcAPI
       break unless @hmhook
       if @access
         color = HIGHLIGHT_COLOR[@access.zero? ? 0 : 1]
-        showMsg(4, 1, x_pos, y_pos, @itemAvail.empty? ? STRINGS[-1] : STRINGS[6])
+        showMsg(4, 1, x_pos, y_pos, @itemAvail.empty? ? $str::STRINGS[-1] : $str::STRINGS[6])
       else
         color = HIGHLIGHT_COLOR[2]
         if @itemAvail.empty?
@@ -489,6 +521,7 @@ module HookProcAPI
         Monsters.monsters[m] = data
       end
       showMsgTxtbox(14, *Monsters.detail((m == 18 && id != 104), *data))
+      EnableWindow.call($hWndText, 1) # now you can use mouse to select / scroll status bar textbox and view more info (I've made changes to the TSW.exe executable such that once the text changes, TEdit8 will be disabled again: TEdit8: OnChange = DisTEdit8 = mov eax, [eax+1c8]; call 413544)
     end
     return 1 if block or nCode == 'init' # upon pressing [WIN] without mouse move
     return CallNextHookEx.call(@hmhook, nCode, wParam, lParam)
@@ -509,15 +542,16 @@ module HookProcAPI
       else
         break unless @winDown and wParam == WM_KEYDOWN
 
-        alphabet = CONSUMABLES['key'].index(key) # which item chosen?
-        alphabet = nil unless @itemAvail.include?(alphabet) # you must have that item
-        arrow = CONSUMABLES['key'][2].index(key) # up/downstairs?
-        arrow = nil unless @itemAvail.include?(2) # you must have orbOfFly
-        break if alphabet.nil? and arrow.nil?
+        if (alphabet = CONSUMABLES['key'].index(key)) # which item chosen?
+          break unless @itemAvail.include?(alphabet) # you must have that item
+        elsif (arrow = CONSUMABLES['key'][2].index(key)) # up/downstairs?
+          break unless @itemAvail.include?(2) # you must have orb of flight
+        else break
+        end
       end
       hWnd = GetForegroundWindow.call
       if hWnd != $hWnd # TSW is not active
-        if getClassName(hWnd)!='TTSW10'
+        if getClassName(hWnd) != TSW_CLS_NAME
           abandon(false)
           break
         end
@@ -545,28 +579,31 @@ module HookProcAPI
             showMsgTxtbox(8) if @flying == 2
             if @lastArrow != arrow
               InvalidateRect.call($hWnd, $OrbFlyRect[@lastArrow], 0)
-              sleep(INTERVAL_DRAW) if @lastArrow < 0
-              DrawTextW.call($hDC, ["\xBC\x25", "\xB2\x25"][arrow], 1, $OrbFlyRect[arrow], arrow << 1)
+              UpdateWindow.call($hWnd) if @lastArrow < 0 # update immediately to clear the invalidated rect
+              DrawTextW.call($hDC, ["\xBC\x25", "\xB2\x25"][arrow], 1, $OrbFlyRect[arrow], arrow << 1) # before this, UpdateWindow must be called; otherwise, the TSW's own redrawing process (caused by `InvalidateRect` above) may clear the drawing here
               PatBlt.call($hDC, (4+arrow)*$TILE_SIZE/2+$ITEMSBAR_LEFT, $ITEMSBAR_TOP, $TILE_SIZE/2, $TILE_SIZE, RASTER_DPo)
               @lastArrow = arrow
             end
           else
             unhookM
-            WriteProcessMemory.call_r($hPrc, CONSUMABLES['event_addr'][2][1], ORB_FLIGHT_RULE_BYTES[1], 6, 0) if arrow == 3 # bypass OrbOfFly restriction (JNZ->NOP)
-            callFunc(CONSUMABLES['event_addr'][2][0]) # Image4Click (OrbOfFly)
+            WriteProcessMemory.call_r($hPrc, CONSUMABLES['event_addr'][2][1], ORB_FLIGHT_RULE_BYTES[1], 6, 0) if arrow == 3 # bypass OrbOfFlight restriction (JNZ->NOP)
+            callFunc(CONSUMABLES['event_addr'][2][0]) # Image4Click (OrbOfFlight)
             WriteProcessMemory.call_r($hPrc, CONSUMABLES['event_addr'][2][1], ORB_FLIGHT_RULE_BYTES[0], 6, 0) if arrow == 3 # restore (JNZ)
+            if arrow == 3 and $mapTiles # up arrow; bypass OrbOfFlight restriction
+              arrow = 0 if $mapTiles.include?(-11) or $mapTiles.include?(-12) # you can access stairs, then it's not considered as cheating
+            end
             if isButtonFocused # can use OrbOfFly successfully (so the up/down/ok button is focused now)
               @flying = (arrow == 3 ? 2 : 0) # cheat or not
               showMsgTxtbox(8) if @flying == 2
               @lastArrow = -1
-              sleep(INTERVAL_DRAW)
+              UpdateWindow.call($hWnd) # update immediately to clear the invalidated rect
               showMsg(@flying, 7)
               SetBkMode.call($hDC, 2) # opaque
               DrawTextW.call($hDC, "\xBC\x25\n\0\xB2\x25", 3, $OrbFlyRect.last, 0) # U+25BC/25B2 = down/up triangle
-              PatBlt.call($hDC, 2*$TILE_SIZE+$ITEMSBAR_LEFT, $ITEMSBAR_TOP, $TILE_SIZE, $TILE_SIZE, RASTER_DPo)
+              PatBlt.call($hDC, 2*$TILE_SIZE+$ITEMSBAR_LEFT, $ITEMSBAR_TOP, $TILE_SIZE, $TILE_SIZE, RASTER_DPo) # before this, UpdateWindow must be called; otherwise, the TSW's own redrawing process (caused by `InvalidateRect` above) may clear the drawing here
             else
               @winDown = false
-              len = SendMessage.call($hWndText, WM_GETTEXT, 256, $buf)
+              len = SendMessage.call($hWndText, WM_GETTEXTLENGTH, 0, nil)
               showMsgTxtbox(10, LONGNAMES[15]) if len < 31 or len > 64 # otherwise, it's because "You must be near the stairs to fly!"
             end
           end
@@ -635,8 +672,27 @@ module HookProcAPI
   private :_keyHook
 end
 
-def showMsgTxtbox(textIndex, *argv)
-  SendMessage.call($hWndText, WM_SETTEXT, 0, textIndex < 0 ? '' : STRINGS[textIndex] % argv)
+def showMsgA(colorIndex, textIndex, *argv)
+  SetDCBrushColor.call($hDC, HIGHLIGHT_COLOR[colorIndex])
+  FillRect.call($hDC, $msgRect, $hBr)
+  DrawText.call($hDC, Str::StrEN::STRINGS[textIndex] % argv, -1, $msgRect, DT_CENTERBOTH)
+end
+def showMsgW(colorIndex, textIndex, *argv)
+  SetDCBrushColor.call($hDC, HIGHLIGHT_COLOR[colorIndex])
+  FillRect.call($hDC, $msgRect, $hBr)
+  DrawTextW.call($hDC, Str.utf8toWChar(Str::StrCN::STRINGS[textIndex] % argv), -1, $msgRect, DT_CENTERBOTH)
+end
+def showMsgTxtboxA(textIndex, *argv)
+  SendMessage.call($hWndText, WM_SETTEXT, 0, textIndex < 0 ? '' : Str::StrEN::STRINGS[textIndex] % argv)
+end
+def showMsgTxtboxW(textIndex, *argv)
+  SendMessageW.call($hWndText, WM_SETTEXT, 0, textIndex < 0 ? '' : Str.utf8toWChar(Str::StrCN::STRINGS[textIndex] % argv))
+end
+def msgboxTxtA(textIndex, flag=MB_ICONASTERISK, *argv)
+  API.msgbox(Str::StrEN::STRINGS[textIndex] % argv, flag, MessageBox)
+end
+def msgboxTxtW(textIndex, flag=MB_ICONASTERISK, *argv)
+  API.msgbox(Str.utf8toWChar(Str::StrCN::STRINGS[textIndex] % argv), flag, MessageBoxW, "t\0s\0w\0M\0P\0\0\0")
 end
 def readMemoryDWORD(address)
   ReadProcessMemory.call_r($hPrc, address, $buf, 4, 0)
@@ -663,6 +719,10 @@ def preExit() # finalize
   WriteProcessMemory.call($hPrc || 0, HELP_ADDR, "\x53\x8B\xD8\x6A\x05\x68", 7, 0) # restore the function of the help menu
   CloseHandle.call($hPrc || 0)
   UnregisterHotKey.call(0, 0)
+end
+def raise_r(*argv)
+  preExit() # ensure all resources disposed
+  raise(*argv)
 end
 def checkTSWsize()
   GetClientRect.call_r($hWnd, $buf)
@@ -694,23 +754,35 @@ def init()
   ReleaseDC.call($hWnd || 0, $hDC || 0)
   CloseHandle.call($hPrc || 0)
 
-  $hWnd = FindWindow.call('TTSW10', 0)
+  $hWnd = FindWindow.call(TSW_CLS_NAME, 0)
   $tID = GetWindowThreadProcessId.call($hWnd, $buf)
   $pID = $buf.unpack('L')[0]
   begin
     load('tswMPdebug.txt')
   rescue Exception
   end
-  raise("Cannot find the TSW process and/or window. Please check if TSW V1.2 is currently running. tswMP has stopped.\n\nAs an advanced option, you can manually assign $pID, $tID and $hWnd in `tswMPdebug.txt'.") if $hWnd.zero? or $pID.zero? or $tID.zero?
+  raise_r("Cannot find the TSW process and/or window. Please check if TSW V1.2 is currently running. tswMP has stopped.\n\nAs an advanced option, you can manually assign $pID, $tID and $hWnd in `tswMPdebug.txt'.") if $hWnd.zero? or $pID.zero? or $tID.zero?
   AttachThreadInput.call_r(GetCurrentThreadId.call_r, $tID, 1) # This is necessary for GetFocus to work: 
   #https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getfocus#remarks
   $hPrc = OpenProcess.call_r(PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_VM_OPERATION, 0, $pID)
+  tApp = readMemoryDWORD(TAPPLICATION_ADDR) # refer to `TApplication.RestoreTopMosts`
+  $hWndTApp = readMemoryDWORD(tApp+OFFSET_OWNER_HWND) # it can also be achived by GetWindow($hWnd, GW_OWNER)
   $TTSW = readMemoryDWORD(TTSW_ADDR)
   edit8 = readMemoryDWORD($TTSW+OFFSET_EDIT8)
   $hWndText = readMemoryDWORD(edit8+OFFSET_HWND)
   $IMAGE6 = readMemoryDWORD($TTSW+OFFSET_IMAGE6)
   $hWndMemo = []
   OFFSET_MEMO123.each {|i| $hWndMemo.push(readMemoryDWORD(readMemoryDWORD($TTSW+i)+OFFSET_HWND))}
+
+  if Str.isCHN()
+    alias :showMsg :showMsgW
+    alias :showMsgTxtbox :showMsgTxtboxW
+    alias :msgboxTxt :msgboxTxtW
+  else
+    alias :showMsg :showMsgA
+    alias :showMsgTxtbox :showMsgTxtboxA
+    alias :msgboxTxt :msgboxTxtA
+  end
 
   showMsgTxtbox(9, $pID, $hWnd)
 
@@ -742,10 +814,9 @@ $x_pos = $y_pos = -1
 RegisterHotKey.call_r(0, 0, MODIFIER, KEY)
 
 HookProcAPI.hookK
-API.msgbox(11)
+msgboxTxt(11)
 
-while true
-  GetMessage.call($buf, 0, 0, 0)
+while GetMessage.call($buf, 0, 0, 0) > 0
   # check if error to be processed within hook callback func
   HookProcAPI.handleHookExceptions
 
@@ -763,8 +834,8 @@ while true
   elsif diff < INTERVAL_REHOOK # twice
     showMsgTxtbox(-1)
     HookProcAPI.rehookK
-    API.msgbox(12)
+    msgboxTxt(12)
   end
 end
 preExit
-API.msgbox(13)
+msgboxTxt(13)

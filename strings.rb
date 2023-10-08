@@ -1,6 +1,16 @@
-# encoding: UTF-8
+# encoding: ASCII-8Bit
+# CHN strings encoding is UTF-8
 
-STRINGS = [
+require './stringsGBK'
+
+$isCHN = false
+$str = Str::StrEN
+module Str
+  TTSW10_TITLE_STR_ADDR = 0x88E74 + BASE_ADDRESS
+  APP_VERSION = '1.2'
+  @strlen = 0
+  module StrEN
+    STRINGS = [
 'tswMP: Please wait for game event to complete...', # 0
 'tswMP: Click the mouse to teleport to (%X,%X)%s',
 'tswMP: Move the mouse to choose a destination to teleport.',
@@ -12,21 +22,22 @@ STRINGS = [
 'tswMP: YOU HAVE CHEATED AT THE GAME!',
 'tswMP: Started. Found TSW running - pID=%d; hWnd=0x%08X',
 'tswMP: Could not use %s!', # 10
-'''tswMovePoint is running. Press the [WIN]/[TAB] key to use!
+'tswMovePoint is running. Press the [WIN]/[TAB] key to use!
 
 When the [WIN] or [TAB] hotkey is down:
-1) Move the mouse and then click to teleport in the map;
+1) Move the mouse and then click to teleport in the map
+   (Right click = cheat);
 2) Press a specified alphabet key to use an item or any
-   arrow keys to use Orb of Flight.
+   arrow keys to use Orb of Flight (Up arrow = cheat).
 
 When holding the hotkey, you can also see:
-* the damage and next critical value of each monster and
+* the next critical value and damage of each monster and
 * other useful data (if you hover the mouse on a monster)
 on the map and in the status bar if you have Orb of Hero.
 
 In addition, you can:
 Double press F7 = Re-register hotkeys if they stop working;
-Hold F7 = Quit tswMovePoint.''',
+Hold F7 = Quit tswMovePoint.',
 'Re-registered [WIN] and [TAB] hotkeys.',
 'tswMovePoint has stopped.',
 'DMG:%s = %s * %sRND | %dG%s',
@@ -35,6 +46,70 @@ Hold F7 = Quit tswMovePoint.''',
 
 'Inf', # -2
 '.' # -1
-]
+    ]
+  end
 
-# for utf-8 encoding: needs W-type API prototypes, and the strings should be processed by `.unpack('U*').pack('S*')`
+  module StrCN
+    STRINGS = [
+'tswMP: 请等待游戏内部事件结束……', # 0
+'tswMP: 单击鼠标传送至 (%X,%X)%s',
+'tswMP: 移动鼠标选择一个传送的目的地。',
+'tswMP: 无法前往 (%X,%X)，请移动鼠标另选一个目的地。',
+'tswMP: 按下字母键 / 方向键使用相应的宝物。',
+'tswMP: 已传送至 (%X,%X)。移动鼠标继续传送%s', # 5
+'，或按下对应按键使用宝物。',
+'tswMP: 使用方向键上 / 下楼，最后松开 [WIN] 或 [TAB] 键确认。',
+'tswMP: 已 作 弊 ！',
+'tswMP: 已启动。发现运行中的 TSW - pID=%d; hWnd=0x%08X',
+'tswMP: 无法使用 %s!', # 10
+'tswMP（座標移動）已开启。按 [WIN]/[TAB] 键使用！
+
+当按下 [WIN] 或 [TAB] 快捷键时：
+1) 单击鼠标可传送到地图上的新位置（右键＝作弊）；
+2) 按下特定字母键可使用对应的宝物；或按下任一
+   方向键，可以使用飞翔灵球（▲ 上方向键＝作弊）。
+
+若拥有勇者灵球，在快捷键按下时还可在地图上显示：
+* 当前地图中所有怪物的下一临界及总伤害；以及
+* 将鼠标移到某个怪物上时，在右下状态栏显示怪物的
+  基本属性，并在底部状态栏显示其他重要数据。
+
+此外，还可以:
+双击 F7＝当快捷键失效时重置快捷键；
+长按 F7＝退出本程序。',
+'已重置 [WIN] 及 [TAB] 快捷键。',
+'tswMovePoint（座標移動）已退出。',
+'伤害：%s = %s × %s回合｜%d金币%s',
+'｜上一临界：%s', # 15
+'｜临界：%s',
+
+'∞', # -2
+'。' # -1
+    ]
+  end
+
+  module_function
+  def utf8toWChar(string)
+    arr = string.unpack('U*')
+    @strlen = arr.size
+    arr.push 0 # end by \0\0
+    return arr.pack('S*')
+  end
+  def strlen() # last length
+    @strlen
+  end
+  def isCHN()
+    ReadProcessMemory.call_r($hPrc, TTSW10_TITLE_STR_ADDR, $buf, 32, 0)
+    title = $buf[0, 32]
+    if title.include?(APP_VERSION)
+      if title.include?(StrEN::APP_NAME)
+        $str = Str::StrEN
+        return ($isCHN = false)
+      elsif title.include?(StrCN::APP_NAME)
+        $str = Str::StrCN
+        return ($isCHN = true)
+      end
+    end
+    raise_r('This is not a compatible TSW game: '+title.rstrip)
+  end
+end

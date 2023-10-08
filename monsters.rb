@@ -57,7 +57,7 @@ module Monsters
     heroATKfactor = (((monster_id == 17 || monster_id == 12 || monster_id == 13) && @cross) || (monster_id == 19 && @dragonSlayer)) ? 2 : 1
     diff = @heroATK - mDEF
     if diff <= 0 # the condition should have been `oneTurnDmg2Mon <= 0`, but in TSW, when you battle with vampire / dragon, even with Cross / DragonSlayer, you will not be able to attack it if your ATK <= its DEF, despite that your ATK*2 > its DEF
-      dmg = turnsCount = STRINGS[-2]
+      dmg = turnsCount = $str::STRINGS[-2]
       criVals = [nil, 1-diff] # should have been `1-oneTurnDmg2Mon`
     else
       oneTurnDmg2Mon = @heroATK*heroATKfactor - mDEF
@@ -132,7 +132,7 @@ module Monsters
     res = @monsters[mID]
     if !res then res = getStatus(mID); @monsters[mID] = res end
     dmg = res[0]
-    if dmg == STRINGS[-2]
+    if dmg == $str::STRINGS[-2]
       danger = true
     else
       danger = (dmg >= @heroHP)
@@ -147,21 +147,21 @@ module Monsters
     criVals = criVals.dup() # copy the original array to avoid affecting its value
     prevCriVal = criVals.shift
     if @statusFactor != 1
-      if dmg != STRINGS[-2]
+      if dmg != $str::STRINGS[-2]
         dmg = format(dmg)
         prevCriVal = format(prevCriVal) if prevCriVal
       end
       oneTurnDmg = format(oneTurnDmg)
       criVals.map! {|i| format(i)}
     end
-    if dmg == STRINGS[-2]
-      return dmg, oneTurnDmg, turnsCount, mGold, STRINGS[16] % criVals.first
+    if dmg == $str::STRINGS[-2]
+      return dmg, oneTurnDmg, turnsCount, mGold, $str::STRINGS[16] % criVals.first
     elsif prevCriVal.nil? # no prevCriVal means DEF-out (zero one-turn-damage)
       return dmg, oneTurnDmg, turnsCount, mGold, ''
     elsif criVals.empty? # no next criVals means ATK-out (zero battle round)
-      return dmg, oneTurnDmg, turnsCount, mGold, STRINGS[15] % prevCriVal
+      return dmg, oneTurnDmg, turnsCount, mGold, $str::STRINGS[15] % prevCriVal
     else
-      return dmg, oneTurnDmg, turnsCount, mGold, (STRINGS[15] % prevCriVal) + (STRINGS[16] % criVals.join('/'))
+      return dmg, oneTurnDmg, turnsCount, mGold, ($str::STRINGS[15] % prevCriVal) + ($str::STRINGS[16] % criVals.join('/'))
     end
   end
   def format(val)
