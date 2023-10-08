@@ -144,8 +144,8 @@ CONSUMABLES = {'position' => [0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13],
   'key' => [72, 78, [VK_LEFT,VK_DOWN, VK_RIGHT,VK_UP], 87, 80, 66, 74, 85, 68, 73, 75, 81], # H N [wasd] W P B J U D I K Q
   'event_addr' => [0x80f60+BASE_ADDRESS, 0x8198c+BASE_ADDRESS, [0x81e80+BASE_ADDRESS, 0x81f59+BASE_ADDRESS, 0x4ed1c+BASE_ADDRESS, 0x4ed94+BASE_ADDRESS, 0x4eaf4+BASE_ADDRESS], 0x8201c+BASE_ADDRESS, 0x82128+BASE_ADDRESS, 0x82234+BASE_ADDRESS, 0x82340+BASE_ADDRESS, 0x8244c+BASE_ADDRESS, 0x82558+BASE_ADDRESS, 0x82664+BASE_ADDRESS, 0x82770+BASE_ADDRESS, 0x8287c+BASE_ADDRESS, 0x50ba0+BASE_ADDRESS]} # imgXXwork; the last is Button38Click (Button_Use)
 
-MODIFIER = 0
-KEY = 118 # hotkey and modifier for quit and keyboard re-hook
+MP_MODIFIER = 0
+MP_HOTKEY = 118 # hotkey and modifier for quit and keyboard re-hook
 MP_KEY1 = VK_LWIN
 MP_KEY2 = VK_TAB # hotkeys for teleportation and using items
 INTERVAL_REHOOK = 450 # the interval for rehook (in msec)
@@ -187,7 +187,7 @@ module Win32
       when 'OpenProcess', 'WriteProcessMemory', 'ReadProcessMemory', 'VirtualAllocEx'
         reason = "Cannot open / read from / write to / alloc memory for the TSW process. Please check if TSW V1.2 is running with pID=#{$pID} and if you have proper permissions."
       when 'RegisterHotKey'
-        reason = "Cannot register hotkey. It might be currently occupied by other processes or another instance of tswMP. Please close them to avoid confliction. Default: F7 (0+ 118); current: (#{MODIFIER}+ #{KEY}). As an advanced option, you can manually assign `MODIFIER` and `KEY` in `tswMPdebug.txt'."
+        reason = "Cannot register hotkey. It might be currently occupied by other processes or another instance of tswMP. Please close them to avoid confliction. Default: F7 (0+ 118); current: (#{MP_MODIFIER}+ #{MP_HOTKEY}). As an advanced option, you can manually assign `MP_MODIFIER` and `MP_HOTKEY` in `tswMPdebug.txt'."
       else
         reason = "This is a fatal error. That is all we know."
       end
@@ -811,7 +811,7 @@ $hPen2 = CreatePen.call_r(0, 3, HIGHLIGHT_COLOR[-2])
 init
 $time = 0
 $x_pos = $y_pos = -1
-RegisterHotKey.call_r(0, 0, MODIFIER, KEY)
+RegisterHotKey.call_r(0, 0, MP_MODIFIER, MP_HOTKEY)
 
 HookProcAPI.hookK
 msgboxTxt(11)

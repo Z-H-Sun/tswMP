@@ -4,11 +4,11 @@
 # $tID = 0
 
 # The following lines modifies the hotkey to be Alt+F2
-MODIFIER = 1
-KEY = 113
+MP_MODIFIER = 1
+MP_HOTKEY = 113
 # Other examples:
-# MODIFIER = 6; KEY = 90 # Ctrl+Shift+Z
-# MODIFIER = 0; KEY = 9 # Tab. This is dangerous and deprecated
+# MP_MODIFIER = 6; MP_HOTKEY = 90 # Ctrl+Shift+Z
+# MP_MODIFIER = 0; MP_HOTKEY = 9 # Tab. This is dangerous and deprecated
 # And so on.
 # Cheat sheet: 0=None, 1=Alt, 2=Ctrl, 4=Shift, 8=Win.
 # Virtual key codes: https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes. A-Z is just their ASCII (65-90). F1-F12 is 112-123.
@@ -18,5 +18,5 @@ KEY = 113
 INTERVAL_REHOOK = 400
 INTERVAL_QUIT = 60
 
-# The following line turns off auto-refresh of TSW status
-$autoRefresh = false
+# The following line turns off the enhanced damage display
+$MPshowMapDmg = false

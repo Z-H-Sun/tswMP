@@ -13,6 +13,7 @@ file:
     type: extension-library
   ./connectivity.rb:
   ./monsters.rb:
+  ./stringsGBK.rb:
   ./strings.rb:
 
 resource:
