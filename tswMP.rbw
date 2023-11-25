@@ -4,15 +4,19 @@
 require 'win32/api'
 include Win32
 GetMessage = API.new('GetMessage', 'PLLL', 'I', 'user32')
+PeekMessage = API.new('PeekMessage','PLLLI', 'I', 'user32')
 PostMessage = API.new('PostMessage','LLLP', 'I', 'user32')
 SendMessage = API.new('SendMessageA', 'LLLP', 'L', 'user32') # ansi
 SendMessageW = API.new('SendMessageW', 'LLLP', 'L', 'user32') # unicode
+TranslateMessage = API.new('TranslateMessage', 'P', 'L', 'user32')
+DispatchMessage = API.new('DispatchMessage', 'P', 'L', 'user32')
 GetClientRect = API.new('GetClientRect', 'LP', 'L', 'user32')
 FillRect = API.new('FillRect', 'LSL', 'L', 'user32')
 OpenProcess = API.new('OpenProcess', 'LLL', 'L', 'kernel32')
 ReadProcessMemory = API.new('ReadProcessMemory', 'LLPLL', 'L', 'kernel32')
 WriteProcessMemory = API.new('WriteProcessMemory', 'LLPLL', 'L', 'kernel32')
 CloseHandle = API.new('CloseHandle', 'L', 'L', 'kernel32')
+GetModuleHandle = API.new('GetModuleHandle', 'I', 'L', 'kernel32')
 GetCurrentThreadId = API.new('GetCurrentThreadId', 'V', 'L', 'kernel32')
 GetWindowThreadProcessId = API.new('GetWindowThreadProcessId', 'LP', 'L', 'user32')
 AttachThreadInput = API.new('AttachThreadInput', 'III', 'I', 'user32')
@@ -24,6 +28,10 @@ GetLastActivePopup = API.new('GetLastActivePopup', 'L', 'L', 'user32')
 ShowWindow = API.new('ShowWindow', 'LI', 'L', 'user32')
 EnableWindow = API.new('EnableWindow', 'LI', 'L', 'user32')
 UpdateWindow = API.new('UpdateWindow', 'L', 'L', 'user32')
+CreateWindowEx = API.new('CreateWindowEx', 'LSSLIIIILLLL', 'L', 'user32')
+SetWindowText = API.new('SetWindowTextA', 'LS', 'L', 'user32')
+SetWindowTextW = API.new('SetWindowTextW', 'LS', 'L', 'user32')
+LoadImage = API.new('LoadImage', 'LLIIII', 'L', 'user32')
 DrawText = API.new('DrawTextA', 'LSIPL', 'L', 'user32')
 DrawTextW = API.new('DrawTextW', 'LSIPL', 'L', 'user32')
 TextOut = API.new('TextOutA', 'LLLSL', 'L', 'gdi32')
@@ -54,11 +62,41 @@ SetROP2 = API.new('SetROP2', 'LI', 'L', 'gdi32')
 CreateFontIndirect = API.new('CreateFontIndirect', 'S', 'L','gdi32')
 RegisterHotKey = API.new('RegisterHotKey', 'LILL', 'L', 'user32')
 UnregisterHotKey = API.new('UnregisterHotKey', 'LI', 'L', 'user32')
+MsgWaitForMultipleObjects = API.new('MsgWaitForMultipleObjects', 'LSILL', 'I', 'user32')
 
+QS_ALLINPUT = 0x4FF
+QS_TIMER = 0x10
+QS_ALLBUTTIMER = QS_ALLINPUT & ~QS_TIMER
+WAIT_TIMEOUT = 258
+
+LR_SHARED = 0x8000
+IMAGE_ICON = 1
+ICON_BIG = 1
+WS_POPUP = 0x80000000
+WS_CHILD = 0x40000000
+WS_VISIBLE = 0x10000000
+WS_BORDER = 0x800000
+WS_EX_LAYERED = 0x80000
+WS_EX_TOOLWINDOW = 0x80
+WS_EX_TOPMOST = 8
+SS_SUNKEN = 0x1000
+SS_NOTIFY = 0x100
+SS_ICON = 3
+SS_RIGHT = 2
+STM_SETICON = 0x170
+
+SW_HIDE = 0
 SW_SHOW = 4 # SHOWNOACTIVATE
 WM_SETTEXT = 0xC
 WM_GETTEXT = 0xD
 WM_GETTEXTLENGTH = 0xE
+WM_SETICON = 0x80
+WM_KEYDOWN = 0x100
+WM_KEYUP = 0x101
+WM_MOUSEMOVE = 0x200
+WM_LBUTTONDOWN = 0x201
+WM_RBUTTONDOWN = 0x204
+WM_MBUTTONDBLCLK = 0x209 # b/w 0x201 and 209 are mouse events
 WM_COMMAND = 0x111
 WM_HOTKEY = 0x312
 WM_APP = 0x8000
@@ -80,9 +118,15 @@ SYSTEM_FONT = 13
 PROCESS_VM_WRITE = 0x20
 PROCESS_VM_READ = 0x10
 PROCESS_VM_OPERATION = 0x8
+PROCESS_SYNCHRONIZE = 0x100000
+IDYES = 6
+IDNO = 7
+MB_YESNOCANCEL = 0x3
 MB_ICONERROR = 0x10
+MB_ICONQUESTION = 0x20
 MB_ICONEXCLAMATION = 0x30
 MB_ICONASTERISK = 0x40
+MB_DEFBUTTON2 = 0x100
 MB_SETFOREGROUND = 0x10000
 R2_XORPEN = 7
 R2_COPYPEN = 13
@@ -92,15 +136,20 @@ RASTER_S = 0xCC0020
 RASTER_DPo = 0xFA0089
 RASTER_DPx = 0x5A0049
 HIGHLIGHT_COLOR = [0x22AA22, 0x60A0C0, 0x2222FF, 0xC07F40, 0x889988, 0x666666, 0xFFFFFF] # OK, suspicious, no-go, item, polyline, background, foreground text (note: not RGB, but rather BGR)
-case [''].pack('p').size
+POINTER_SIZE = [nil].pack('p').size
+case POINTER_SIZE
 when 4 # 32-bit ruby
   MSG_INFO_STRUCT = 'L7'
+  HANDLE_ARRAY_STRUCT = 'L*'
 when 8 # 64-bit
   MSG_INFO_STRUCT = 'Q4L3'
+  HANDLE_ARRAY_STRUCT = 'Q*'
 else
   raise 'Unsupported system or ruby version (neither 32-bit or 64-bit).'
 end
 
+APP_SETTINGS_FNAME = 'tswMPdebug.txt'
+APP_ICON_ID = 1 # Icons will be shown in the GUI of this app; this defines the integer identifier of the icon resource in the executable
 TSW_CLS_NAME = 'TTSW10'
 BASE_ADDRESS = 0x400000
 OFFSET_EDIT8 = 0x1c8 # status bar textbox at bottom
@@ -152,6 +201,7 @@ MP_KEY1 = VK_LWIN
 MP_KEY2 = VK_TAB # hotkeys for teleportation and using items
 INTERVAL_REHOOK = 450 # the interval for rehook (in msec)
 INTERVAL_QUIT = 50 # for quit (in msec)
+INTERVAL_TSW_RECHECK = 500 # in msec: when TSW is not running, check every 500 ms if a new TSW instance has started up
 
 $MPshowMapDmg = true # whether to enable enhanced damage display
 $buf = "\0" * 640
@@ -185,13 +235,18 @@ module Win32
     end
     def call_r(*argv) # provide more info if a win32api returns null
       r = call(*argv)
-      return r unless r.zero?
+      return r if $preExitProcessed # do not throw error if ready to exit
+      if function_name == 'MsgWaitForMultipleObjects'
+        return r if r >= 0 # WAIT_FAILED = (DWORD)0xFFFFFFFF
+      else
+        return r unless r.zero?
+      end
       err = '0x%04X' % API.last_error
       case function_name
       when 'OpenProcess', 'WriteProcessMemory', 'ReadProcessMemory', 'VirtualAllocEx'
         reason = "Cannot open / read from / write to / alloc memory for the TSW process. Please check if TSW V1.2 is running with pID=#{$pID} and if you have proper permissions."
       when 'RegisterHotKey'
-        reason = "Cannot register hotkey. It might be currently occupied by other processes or another instance of tswMP. Please close them to avoid confliction. Default: F7 (0+ 118); current: (#{MP_MODIFIER}+ #{MP_HOTKEY}). As an advanced option, you can manually assign `MP_MODIFIER` and `MP_HOTKEY` in `tswMPdebug.txt'."
+        reason = "Cannot register hotkey. It might be currently occupied by other processes or another instance of tswMP. Please close them to avoid confliction. Default: F7 (0+ 118); current: (#{MP_MODIFIER}+ #{MP_HOTKEY}). As an advanced option, you can manually assign `MP_MODIFIER` and `MP_HOTKEY` in `#{APP_SETTINGS_FNAME}'."
       else
         reason = "This is a fatal error. That is all we know."
       end
@@ -218,7 +273,6 @@ module HookProcAPI
   CallNextHookEx = API.new('CallNextHookEx', 'ILLL', 'I', 'user32')
   GetClassName = API.new('GetClassName', 'LPL', 'I', 'user32')
   ClipCursor = API.new('ClipCursor', 'S', 'I', 'user32')
-  GetModuleHandle = API.new('GetModuleHandle', 'I', 'I', 'kernel32')
   RtlMoveMemory = API.new('RtlMoveMemory', 'PLI', 'V', 'kernel32')
   BeginPath = API.new('BeginPath', 'L', 'L', 'gdi32')
   EndPath = API.new('EndPath', 'L', 'L', 'gdi32')
@@ -226,12 +280,6 @@ module HookProcAPI
 
   WH_KEYBOARD_LL = 13
   WH_MOUSE_LL = 14
-  WM_KEYDOWN = 0x100
-  WM_KEYUP = 0x101
-  WM_MOUSEMOVE = 0x200
-  WM_LBUTTONDOWN = 0x201
-  WM_RBUTTONDOWN = 0x204
-  @hMod = GetModuleHandle.call_r(0)
   @hkhook = nil
   @hmhook = nil
   @itemAvail = [] # the items you have
@@ -558,13 +606,7 @@ module HookProcAPI
         end
       end
       hWnd = GetForegroundWindow.call
-      if hWnd != $hWnd # TSW is not active
-        if getClassName(hWnd) != TSW_CLS_NAME
-          abandon(false)
-          break
-        end
-        init # if another TSW is active now
-      end
+      if hWnd != $hWnd then abandon(false); break end # TSW is not active
 
       block = true
       if wParam == WM_KEYDOWN
@@ -642,7 +684,7 @@ module HookProcAPI
 
   def hookK
     return false if @hkhook
-    @hkhook = SetWindowsHookEx.call_r(WH_KEYBOARD_LL, KeyboardProc, @hMod, 0)
+    @hkhook = SetWindowsHookEx.call_r(WH_KEYBOARD_LL, KeyboardProc, $hMod, 0)
     return true
   end
   def unhookK
@@ -657,7 +699,7 @@ module HookProcAPI
   end
   def hookM
     return false if @hmhook
-    @hmhook = SetWindowsHookEx.call_r(WH_MOUSE_LL, MouseProc, @hMod, 0)
+    @hmhook = SetWindowsHookEx.call_r(WH_MOUSE_LL, MouseProc, $hMod, 0)
     return true
   end
   def unhookM(noCheck=false)
@@ -722,6 +764,7 @@ def disposeRes() # when switching to a new TSW process, hDC and hPrc will be reg
   DeleteDC.call($hMemDC || 0)
   ReleaseDC.call($hWnd || 0, $hDC || 0)
   CloseHandle.call($hPrc || 0)
+  $appTitle = nil
 end
 def preExit() # finalize
   DeleteObject.call($hPen || 0)
@@ -758,32 +801,8 @@ def checkTSWsize()
   $OrbFlyRect = [[x1, $ITEMSBAR_TOP, x2, y1].pack('l4'), [x2, $ITEMSBAR_TOP, x3, y1].pack('l4'), [x1, $ITEMSBAR_TOP, x3, y1].pack('l4')] # left(0), right(1), none(-1)
   $msgRect = [0, $H-$MAP_TOP*2, $W-2, $H-$MAP_TOP].pack('l4')
 end
-def init()
-  DeleteObject.call($hBMP || 0)
-  DeleteDC.call($hMemDC || 0)
-  ReleaseDC.call($hWnd || 0, $hDC || 0)
-  CloseHandle.call($hPrc || 0)
-
-  $hWnd = FindWindow.call(TSW_CLS_NAME, 0)
-  $tID = GetWindowThreadProcessId.call($hWnd, $buf)
-  $pID = $buf.unpack('L')[0]
-  begin
-    load('tswMPdebug.txt')
-  rescue Exception
-  end
-  raise_r("Cannot find the TSW process and/or window. Please check if TSW V1.2 is currently running. tswMP has stopped.\n\nAs an advanced option, you can manually assign $pID, $tID and $hWnd in `tswMPdebug.txt'.") if $hWnd.zero? or $pID.zero? or $tID.zero?
-  AttachThreadInput.call_r(GetCurrentThreadId.call_r, $tID, 1) # This is necessary for GetFocus to work: 
-  #https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getfocus#remarks
-  $hPrc = OpenProcess.call_r(PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_VM_OPERATION, 0, $pID)
-  tApp = readMemoryDWORD(TAPPLICATION_ADDR) # refer to `TApplication.RestoreTopMosts`
-  $hWndTApp = readMemoryDWORD(tApp+OFFSET_OWNER_HWND) # it can also be achived by GetWindow($hWnd, GW_OWNER)
-  $TTSW = readMemoryDWORD(TTSW_ADDR)
-  edit8 = readMemoryDWORD($TTSW+OFFSET_EDIT8)
-  $hWndText = readMemoryDWORD(edit8+OFFSET_HWND)
-  $IMAGE6 = readMemoryDWORD($TTSW+OFFSET_IMAGE6)
-  $hWndMemo = [] # reset as empty here and will be assigned later, because during prologue, these textboxes' hWnd are not assigned yet (a potential workaround is to `mov eax, TTSW10.TMemo1/2/3` and `call TWinControl.HandleNeeded`, but I'm lazy and it is really not worth the trouble)
-
-  if Str.isCHN()
+def initLang()
+  if $isCHN
     alias :showMsg :showMsgW
     alias :showMsgTxtbox :showMsgTxtboxW
     alias :msgboxTxt :msgboxTxtW
@@ -792,8 +811,51 @@ def init()
     alias :showMsgTxtbox :showMsgTxtboxA
     alias :msgboxTxt :msgboxTxtA
   end
+end
+def initSettings()
+  load(File.exist?(APP_SETTINGS_FNAME) ? APP_SETTINGS_FNAME : File.join(APP_PATH, APP_SETTINGS_FNAME))
+rescue Exception
+end
+def waitTillAvail(addr) # upon initialization of TSW, some pointers or handles are not ready yet; need to wait
+  r = readMemoryDWORD(addr)
+  while r.zero?
+    case MsgWaitForMultipleObjects.call_r(1, $bufHWait, 0, INTERVAL_TSW_RECHECK, QS_ALLBUTTIMER)
+    when 0 # TSW quits during waiting
+      disposeRes()
+      return
+    when 1 # this thread's msg
+      checkMsg(false)
+    when WAIT_TIMEOUT
+      r = readMemoryDWORD(addr)
+    end
+  end
+  return r
+end
+def init()
+  $hWnd = FindWindow.call(TSW_CLS_NAME, 0)
+  $tID = GetWindowThreadProcessId.call($hWnd, $buf)
+  $pID = $buf.unpack('L')[0]
+  return false if $hWnd.zero? or $pID.zero? or $tID.zero?
 
-  showMsgTxtbox(9, $pID, $hWnd)
+  initSettings()
+  AttachThreadInput.call_r(GetCurrentThreadId.call_r, $tID, 1) # This is necessary for GetFocus to work: 
+  #https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getfocus#remarks
+  $hPrc = OpenProcess.call_r(PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_VM_OPERATION | PROCESS_SYNCHRONIZE, 0, $pID)
+  $bufHWait[0, POINTER_SIZE] = [$hPrc].pack(HANDLE_ARRAY_STRUCT)
+
+  tApp = readMemoryDWORD(TAPPLICATION_ADDR)
+  $hWndTApp = readMemoryDWORD(tApp+OFFSET_OWNER_HWND)
+  $TTSW = readMemoryDWORD(TTSW_ADDR)
+  return unless (edit8 = waitTillAvail($TTSW+OFFSET_EDIT8))
+  return unless ($hWndText = waitTillAvail(edit8+OFFSET_HWND))
+  $IMAGE6 = readMemoryDWORD($TTSW+OFFSET_IMAGE6)
+  $hWndMemo = [] # reset as empty here and will be assigned later, because during prologue, these textboxes' hWnd are not assigned yet (a potential workaround is to `mov eax, TTSW10.TMemo1/2/3` and `call TWinControl.HandleNeeded`, but I'm lazy and it is really not worth the trouble)
+
+  ShowWindow.call($hWndStatic1, SW_HIDE)
+  Str.isCHN()
+  initLang()
+  $appTitle = 'tswMP - pID=%d' % $pID
+  $appTitle = Str.utf8toWChar($appTitle) if $isCHN
 
   checkTSWsize
   $hDC = GetDC.call_r($hWnd)
@@ -806,42 +868,96 @@ def init()
   SetBkColor.call($hDC, HIGHLIGHT_COLOR[-2])
   SetBkMode.call($hDC, 1) # transparent
   SetTextColor.call($hDC, HIGHLIGHT_COLOR.last)
+
+  HookProcAPI.hookK
+  showMsgTxtbox(9, $pID, $hWnd)
+  msgboxTxt(11)
+  return true
+end
+def waitInit()
+  ShowWindow.call($hWndStatic1, SW_SHOW)
+  if $isCHN
+    SetWindowTextW.call($hWndStatic1, Str.utf8toWChar(Str::StrCN::STRINGS[20]))
+  else
+    SetWindowText.call($hWndStatic1, Str::StrEN::STRINGS[20])
+  end
+  loop do # waiting while processing messages
+    case MsgWaitForMultipleObjects.call_r(0, nil, 0, INTERVAL_TSW_RECHECK, QS_ALLBUTTIMER)
+    when 0
+      checkMsg(false)
+    when WAIT_TIMEOUT
+      break if init()
+    end
+  end
+end
+def checkMsg(checkAll=true)
+  while !PeekMessage.call($buf, 0, 0, 0, 1).zero?
+    msg = $buf.unpack(MSG_INFO_STRUCT)
+    case msg[1]
+    when WM_HOTKEY
+      time = msg[4]
+      diff = time - $time
+      $time = time
+      case msg[2]
+      when 0
+        if diff < INTERVAL_QUIT # hold
+          preExit; msgboxTxt(13); exit
+        elsif diff < INTERVAL_REHOOK # twice
+          next unless checkAll # TSW must be running
+          showMsgTxtbox(-1)
+          HookProcAPI.rehookK
+          msgboxTxt(12)
+        elsif !checkAll
+          ShowWindow.call($hWndStatic1, SW_SHOW)
+        end
+        next
+      end
+    when WM_LBUTTONDOWN..WM_MBUTTONDBLCLK
+      if msg[0] == $hWndStatic1
+        case msgboxTxt(21, MB_YESNOCANCEL|MB_DEFBUTTON2|MB_ICONQUESTION)
+        when IDYES
+          preExit; msgboxTxt(13); exit
+        when IDNO
+          ShowWindow.call($hWndStatic1, SW_HIDE)
+        end
+     end
+    when WM_APP
+      HookProcAPI.handleHookExceptions # check if error to be processed within hook callback func
+    end
+    TranslateMessage.call($buf)
+    DispatchMessage.call($buf)
+  end
 end
 
+CUR_PATH = Dir.pwd
+APP_PATH = File.dirname($Exerb ? ExerbRuntime.filepath : __FILE__) # after packed by ExeRB into exe, __FILE__ will be useless
+initSettings()
+initLang()
+$time = 0
+$x_pos = $y_pos = -1
+$bufHWait = "\0" * (POINTER_SIZE << 1)
+$hMod = GetModuleHandle.call_r(0)
 $hGUIFont = CreateFontIndirect.call_r(DAMAGE_DISPLAY_FONT.pack('L5C8a32'))
 $hSysFont = GetStockObject.call_r(SYSTEM_FONT)
 $hBr = GetStockObject.call_r(DC_BRUSH)
 $hPen = CreatePen.call_r(0, 3, HIGHLIGHT_COLOR[4])
 $hPen2 = CreatePen.call_r(0, 3, HIGHLIGHT_COLOR[-2])
 
-init
-$time = 0
-$x_pos = $y_pos = -1
+$hIco = LoadImage.call($hMod, APP_ICON_ID, IMAGE_ICON, 48, 48, LR_SHARED)
+$hWndStatic1 = CreateWindowEx.call_r(WS_EX_TOOLWINDOW|WS_EX_TOPMOST, 'STATIC', nil, WS_POPUP|WS_BORDER|SS_SUNKEN|SS_NOTIFY|SS_RIGHT, 20, 20, 142, 52, 0, 0, 0, 0)
+$hWndStatic2 = CreateWindowEx.call_r(0, 'STATIC', nil, WS_CHILD|WS_VISIBLE|SS_ICON, 0, 0, 48, 48, $hWndStatic1, 0, 0, 0) # a simpler method without the need of calling LoadImage is to set the title as '#1', but that cannot specify the icon size to be 48x48 (see commit `tswSL@eea9ca7`)
+SendMessage.call($hWndStatic2, STM_SETICON, $hIco, 0)
+
 RegisterHotKey.call_r(0, 0, MP_MODIFIER, MP_HOTKEY)
+waitInit() unless init()
 
-HookProcAPI.hookK
-msgboxTxt(11)
-
-while GetMessage.call($buf, 0, 0, 0) > 0
-  # check if error to be processed within hook callback func
-  HookProcAPI.handleHookExceptions
-
-  msg = $buf.unpack(MSG_INFO_STRUCT)
-  next if msg[1] != WM_HOTKEY
-
-  init if IsWindow.call($hWnd).zero? # reinit if TSW has quitted
-  time = msg[4]
-  diff = time - $time
-  $time = time
-
-  if diff < INTERVAL_QUIT # hold
-    showMsgTxtbox(-1)
-    break
-  elsif diff < INTERVAL_REHOOK # twice
-    showMsgTxtbox(-1)
-    HookProcAPI.rehookK
-    msgboxTxt(12)
+loop do
+  case MsgWaitForMultipleObjects.call_r(1, $bufHWait, 0, -1, QS_ALLBUTTIMER)
+  when 0 # TSW has quitted
+    disposeRes()
+    waitInit()
+    next
+  when 1 # this thread's msg
+    checkMsg()
   end
 end
-preExit
-msgboxTxt(13)

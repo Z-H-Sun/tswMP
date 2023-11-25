@@ -24,7 +24,7 @@ module Str
 'tswMP: YOU HAVE CHEATED AT THE GAME!',
 'tswMP: Started. Found TSW running - pID=%d; hWnd=0x%08X',
 'tswMP: Could not use %s!', # 10
-'tswMovePoint is running. Press the [WIN]/[TAB] key to use!
+'tswMovePoint is running. Here is a summary of the usage:
 
 When the [WIN] or [TAB] hotkey is down:
 1) Move the mouse and then click to teleport in the map
@@ -44,7 +44,17 @@ Hold F7        	= Quit tswMovePoint.',
 'tswMovePoint has stopped.',
 'DMG:%s = %s * %sRND | %dG%s',
 ' | PrevCRI:%s', # 15
-' | NextCRI:%s',
+' | NextCRI:%s', '', '', '',
+
+'--- tswMP ---  
+Waiting for   
+TSW to start ', # 20
+'Do you want to stop waiting for the TSW game to start?
+
+Choose "Yes" to quit this app; "Cancel" to do nothing;
+"No" to continue waiting but hide this status window,
+and you can press F7 to show it again later.',
+
 
 'Inf', # -2
 '.' # -1
@@ -66,7 +76,7 @@ Hold F7        	= Quit tswMovePoint.',
 'tswMP: 已 作 弊 ！',
 'tswMP: 已启动。发现运行中的 TSW - pID=%d; hWnd=0x%08X',
 'tswMP: 无法使用%s！', # 10
-'tswMP（座標移動）已开启。按 [WIN]/[TAB] 键使用！
+'tswMP（座標移動）已开启，以下为使用方法摘要。
 
 当按下 [WIN] 或 [TAB] 快捷键时：
 1) 单击鼠标可传送到地图上的新位置（右键＝作弊）；
@@ -85,7 +95,17 @@ Hold F7        	= Quit tswMovePoint.',
 'tswMovePoint（座標移動）已退出。',
 '伤害：%s = %s × %s回合｜%d金币%s',
 '｜上一临界：%s', # 15
-'｜临界：%s',
+'｜临界：%s', '', '', '',
+
+'--- tswMP ---  
+正在等待魔塔
+主进程启动…', # 20
+'是否停止等待魔塔主程序 TSW 启动？
+
+按“是”将退出本程序；按“取消”则继续待机；
+按“否”也将继续等待，但会隐藏此状态窗口，
+之后可按 F7 快捷键重新显示。',
+
 
 '∞', # -2
 '。' # -1
@@ -103,6 +123,11 @@ Hold F7        	= Quit tswMovePoint.',
     @strlen
   end
   def isCHN()
+    if $isCHN == 1 # always use Chinese
+      $str = Str::StrCN; return true
+    elsif $isCHN == nil # always use English
+      $str = Str::StrEN; return false
+    end
     ReadProcessMemory.call_r($hPrc, TTSW10_TITLE_STR_ADDR, $buf, 32, 0)
     title = $buf[0, 32]
     if title.include?(APP_VERSION)
