@@ -10,6 +10,8 @@ module Str
   APP_VERSION = '1.2'
   @strlen = 0
   module StrEN
+    LONGNAMES = ['Life Pt (HP)', 'Offense(ATK)', 'Defense(DEF)', 'Gold Count', 'CurrentFloor', 'HighestFloor', 'X Coordinate', 'Y Coordinate', '(Yellow) Key', 'Blue Key', 'Red  Key', 'Altar Visits',
+'Weapon(Sword)', 'Shield Level', 'OrbOfHero', 'OrbOfWisdom', 'OrbOfFlight', 'Cross', 'Elixir', 'Mattock', 'DestructBall', 'WarpWing', 'AscentWing', 'DescentWing', 'DragonSlayer', 'SnowCrystal', 'MagicKey', 'SuperMattock', 'LuckyGold']
     STRINGS = [
 'tswMP: Please wait for game event to complete...', # 0
 'tswMP: Click the mouse to teleport to (%X,%X)%s',
@@ -36,8 +38,8 @@ When holding the hotkey, you can also see:
 on the map and in the status bar if you have Orb of Hero.
 
 In addition, you can:
-Double press F7 = Re-register hotkeys if they stop working;
-Hold F7 = Quit tswMovePoint.',
+Double press F7	= Re-register hotkeys if they stop working;
+Hold F7        	= Quit tswMovePoint.',
 'Re-registered [WIN] and [TAB] hotkeys.',
 'tswMovePoint has stopped.',
 'DMG:%s = %s * %sRND | %dG%s',
@@ -50,6 +52,8 @@ Hold F7 = Quit tswMovePoint.',
   end
 
   module StrCN
+    LONGNAMES = ['生 命 力', '攻 击 力', '防 御 力', '金 币 数', '当 前 楼 层', '最 高 楼 层', 'Ｘ 坐 标', 'Ｙ 坐 标', '黄 钥 匙', '蓝 钥 匙', '红 钥 匙', '祭 坛 次 数',
+'佩 剑 等 级', '盾 牌 等 级', '勇 者 灵 球', '智 慧 灵 球', '飞 翔 灵 球', '十 字 架', '万 灵 药', '魔    镐', '破 坏 爆 弹', '瞬 移 之 翼', '升 华 之 翼', '降 临 之 翼', '屠 龙 匕', '雪 之 结 晶', '魔 法 钥 匙', '超 级 魔 镐', '幸 运 金 币']
     STRINGS = [
 'tswMP: 请等待游戏内部事件结束……', # 0
 'tswMP: 单击鼠标传送至 (%X,%X)%s',
@@ -61,7 +65,7 @@ Hold F7 = Quit tswMovePoint.',
 'tswMP: 使用方向键上 / 下楼，最后松开 [WIN] 或 [TAB] 键确认。',
 'tswMP: 已 作 弊 ！',
 'tswMP: 已启动。发现运行中的 TSW - pID=%d; hWnd=0x%08X',
-'tswMP: 无法使用 %s!', # 10
+'tswMP: 无法使用%s！', # 10
 'tswMP（座標移動）已开启。按 [WIN]/[TAB] 键使用！
 
 当按下 [WIN] 或 [TAB] 快捷键时：
@@ -75,8 +79,8 @@ Hold F7 = Quit tswMovePoint.',
   基本属性，并在底部状态栏显示其他重要数据。
 
 此外，还可以:
-双击 F7＝当快捷键失效时重置快捷键；
-长按 F7＝退出本程序。',
+双击 F7     	＝当快捷键失效时重置快捷键；
+长按 F7     	＝退出本程序。',
 '已重置 [WIN] 及 [TAB] 快捷键。',
 'tswMovePoint（座標移動）已退出。',
 '伤害：%s = %s × %s回合｜%d金币%s',

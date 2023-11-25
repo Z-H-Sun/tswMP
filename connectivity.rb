@@ -1,9 +1,3 @@
-require './monsters'
-
-MAP_ADDR = 0xb8934 + BASE_ADDRESS
-MAP_TYPE = 'C121'
-SACREDSHIELD_ADDR = 0xb872c + BASE_ADDRESS
-
 module Connectivity
   @queue = []
   @ancestor = Array.new(121) # for each position, record its parent position (where it is moved from)

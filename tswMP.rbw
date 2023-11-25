@@ -3,8 +3,9 @@
 
 require 'win32/api'
 include Win32
-GetMessage = API.new('GetMessage', 'PLLL', 'L', 'user32')
-SendMessage = API.new('SendMessage', 'LLLP', 'L', 'user32') # ansi
+GetMessage = API.new('GetMessage', 'PLLL', 'I', 'user32')
+PostMessage = API.new('PostMessage','LLLP', 'I', 'user32')
+SendMessage = API.new('SendMessageA', 'LLLP', 'L', 'user32') # ansi
 SendMessageW = API.new('SendMessageW', 'LLLP', 'L', 'user32') # unicode
 GetClientRect = API.new('GetClientRect', 'LP', 'L', 'user32')
 FillRect = API.new('FillRect', 'LSL', 'L', 'user32')
@@ -12,7 +13,7 @@ OpenProcess = API.new('OpenProcess', 'LLL', 'L', 'kernel32')
 ReadProcessMemory = API.new('ReadProcessMemory', 'LLPLL', 'L', 'kernel32')
 WriteProcessMemory = API.new('WriteProcessMemory', 'LLPLL', 'L', 'kernel32')
 CloseHandle = API.new('CloseHandle', 'L', 'L', 'kernel32')
-GetCurrentThreadId = API.new('GetCurrentThreadId', 'V', 'I', 'kernel32')
+GetCurrentThreadId = API.new('GetCurrentThreadId', 'V', 'L', 'kernel32')
 GetWindowThreadProcessId = API.new('GetWindowThreadProcessId', 'LP', 'L', 'user32')
 AttachThreadInput = API.new('AttachThreadInput', 'III', 'I', 'user32')
 MessageBox = API.new('MessageBoxA', 'LSSI', 'L', 'user32')
@@ -60,6 +61,7 @@ WM_GETTEXT = 0xD
 WM_GETTEXTLENGTH = 0xE
 WM_COMMAND = 0x111
 WM_HOTKEY = 0x312
+WM_APP = 0x8000
 VK_LWIN = 0x5B
 VK_RWIN = 0x5C
 VK_TAB = 9
@@ -116,22 +118,20 @@ OFFSET_CTL_WIDTH = 0x2c
 MIDSPEED_MENUID = 33 # The idea is to hijack the midspeed menu
 MIDSPEED_ADDR = 0x7f46d + BASE_ADDRESS # so once click event of that menu item is triggered, arbitrary code can be executed
 MIDSPEED_ORIG = 0x6F # original bytecode (call TTSW10.speedmiddle@0x47f4e0)
-HELP_MENUID = 54 # similar with above
-HELP_ADDR = 0x7d2d8 + BASE_ADDRESS # now the help menu is replaced by syokidata2 subroutine (refresh event)
-REFRESH_ADDR = 0x54de8 + BASE_ADDRESS # TTSW10.syokidata2
 REFRESH_XYPOS_ADDR = 0x42c38 + BASE_ADDRESS # TTSW10.mhyouji
 TIMER1_ADDR = 0x43120 + BASE_ADDRESS
 TIMER2_ADDR = 0x5265c + BASE_ADDRESS
 TTSW_ADDR = 0x8c510 + BASE_ADDRESS
 TAPPLICATION_ADDR = 0x8a6f8 + BASE_ADDRESS
-POINTER_ANSI_STR_ADDR = 0x8c5d4 + BASE_ADDRESS
 MAP_LEFT_ADDR = 0x8c578 + BASE_ADDRESS
 MAP_TOP_ADDR = 0x8c57c + BASE_ADDRESS
 MOVE_ADDR = [0x84c58+BASE_ADDRESS, 0x84c04+BASE_ADDRESS, 0x84bb0+BASE_ADDRESS, 0x84b5c+BASE_ADDRESS] # down/right/left/up
+TEDIT8_MSGID_ADDR = 0x8c58c + BASE_ADDRESS
 EVENTFLAG_ADDR = 0x8c5ac + BASE_ADDRESS
+POINTER_ANSI_STR_ADDR = 0x8c5d4 + BASE_ADDRESS
+ORB_FLIGHT_RULE_MSG_ID = 0x14 # you must be near the stairs to fly
 ORB_FLIGHT_RULE_BYTES = ["\x0F\x85\xA2\0\0\0", "\x90"*6] # 0: original bytes (JNZ); 1: bypass OrbOfFly restriction (NOP)
-LONGNAMES = ['Life  (HP)', 'Ofns (ATK)', 'Dfns (DEF)', 'Gold', 'Floor', 'HighestFlr', 'X-Position', 'Y-Position', 'YellowKey', 'BlueKey', 'RedKey',
-  'Sword', 'Shield', 'OrbOfHero', 'OrbWisdom', 'OrbFlight', 'Cross', 'Elixir', 'Mattock', 'DestrBall', 'WarpWing', 'AscentWing', 'DescntWing', 'DragonSlay', 'SnowCryst', 'MagicKey', 'SupMattock', 'LuckyGold']
+SACREDSHIELD_ADDR = 0xb872c + BASE_ADDRESS
 STATUS_ADDR = 0xb8688 + BASE_ADDRESS
 STATUS_INDEX = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 9] # HP; ATK; ... Sword and shield are in item list
 STATUS_LEN = 11
@@ -140,6 +140,8 @@ ITEM_ADDR = 0xb86c4 + BASE_ADDRESS
 ITEM_INDEX = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] # The first 2 are sword and shield respectively; OrbOfHero; OrbOfWis; ...
 ITEM_LEN = 17
 ITEM_TYPE = 'l17'
+MAP_ADDR = 0xb8934 + BASE_ADDRESS
+MAP_TYPE = 'C121'
 CONSUMABLES = {'position' => [0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13],
   'key' => [72, 78, [VK_LEFT,VK_DOWN, VK_RIGHT,VK_UP], 87, 80, 66, 74, 85, 68, 73, 75, 81], # H N [wasd] W P B J U D I K Q
   'event_addr' => [0x80f60+BASE_ADDRESS, 0x8198c+BASE_ADDRESS, [0x81e80+BASE_ADDRESS, 0x81f59+BASE_ADDRESS, 0x4ed1c+BASE_ADDRESS, 0x4ed94+BASE_ADDRESS, 0x4eaf4+BASE_ADDRESS], 0x8201c+BASE_ADDRESS, 0x82128+BASE_ADDRESS, 0x82234+BASE_ADDRESS, 0x82340+BASE_ADDRESS, 0x8244c+BASE_ADDRESS, 0x82558+BASE_ADDRESS, 0x82664+BASE_ADDRESS, 0x82770+BASE_ADDRESS, 0x8287c+BASE_ADDRESS, 0x50ba0+BASE_ADDRESS]} # imgXXwork; the last is Button38Click (Button_Use)
@@ -155,6 +157,7 @@ $MPshowMapDmg = true # whether to enable enhanced damage display
 $buf = "\0" * 640
 
 require './connectivity'
+require './monsters'
 require './strings'
 
 module Win32
@@ -169,7 +172,7 @@ module Win32
 # which will show prolog animation and restart the game! (can change the first opcode `push ebp` to `ret` to avoid)
       return hWnd
     end
-    def self.msgbox(text, flag=MB_ICONASTERISK, api=MessageBox, title='tswMP')
+    def self.msgbox(text, flag=MB_ICONASTERISK, api=(ansi=true; MessageBox), title=$appTitle)
       if IsWindow.call($hWnd || 0).zero?
         hWnd = $hWnd = 0 # if the window has gone, create a system level msgbox
       else
@@ -177,6 +180,7 @@ module Win32
 # because if use $hWnd as parent in such cases, the main window will be activated,
 # causing a) the popup window losing focus and b) the adverse effect discussed earlier
       end
+      title = (ansi ? 'tswMP' : "t\0s\0w\0M\0P\0\0") unless $appTitle
       return api.call(hWnd, text, title, flag | MB_SETFOREGROUND)
     end
     def call_r(*argv) # provide more info if a win32api returns null
@@ -212,10 +216,10 @@ module HookProcAPI
   SetWindowsHookEx = API.new('SetWindowsHookEx', 'IKII', 'I', 'user32')
   UnhookWindowsHookEx = API.new('UnhookWindowsHookEx', 'I', 'I', 'user32')
   CallNextHookEx = API.new('CallNextHookEx', 'ILLL', 'I', 'user32')
-  GetClassName = API.new('GetClassName', 'LPL', 'L', 'user32')
+  GetClassName = API.new('GetClassName', 'LPL', 'I', 'user32')
   ClipCursor = API.new('ClipCursor', 'S', 'I', 'user32')
   GetModuleHandle = API.new('GetModuleHandle', 'I', 'I', 'kernel32')
-  RtlMoveMemory = API.new('RtlMoveMemory', 'PLI', 'I', 'kernel32')
+  RtlMoveMemory = API.new('RtlMoveMemory', 'PLI', 'V', 'kernel32')
   BeginPath = API.new('BeginPath', 'L', 'L', 'gdi32')
   EndPath = API.new('EndPath', 'L', 'L', 'gdi32')
   StrokePath = API.new('StrokePath', 'L', 'L', 'gdi32')
@@ -306,6 +310,9 @@ module HookProcAPI
     floor = $heroStatus[STATUS_INDEX[4]]
     mFac = readMemoryDWORD(MONSTER_STATUS_FACTOR_ADDR) + 1
     if mFac != 1
+      if $hWndMemo.empty? # $hWndMemo not yet defined
+        OFFSET_MEMO123.each {|i| $hWndMemo.push(readMemoryDWORD(readMemoryDWORD($TTSW+i)+OFFSET_HWND))}
+      end # these can't be immediately assigned upon TSW initialization; see `init`
       for i in 0..2
         SendMessage.call($hWndMemo[i], WM_SETTEXT, 0, '%d.%02d' % (hero[i]*100/mFac).divmod(100))
       end
@@ -427,6 +434,7 @@ module HookProcAPI
           end
           showMsgTxtbox(-1)
         end
+        EnableWindow.call($hWndText, 0)
         writeMemoryDWORD(STATUS_ADDR + (STATUS_INDEX[6] << 2), x)
         writeMemoryDWORD(STATUS_ADDR + (STATUS_INDEX[7] << 2), y)
 
@@ -569,7 +577,7 @@ module HookProcAPI
           if isButtonFocused # can use item successfully (so the don't-use button is focused now)
             callFunc(CONSUMABLES['event_addr'][12]) if alphabet > 2 # buttonUseClick = click 'Use' (excluding OrbOfHero/Wisdom)
           else
-            showMsgTxtbox(10, LONGNAMES[13+alphabet])
+            showMsgTxtbox(10, $str::LONGNAMES[14+alphabet].gsub(' ', ''))
           end
 
         elsif arrow
@@ -603,8 +611,7 @@ module HookProcAPI
               PatBlt.call($hDC, 2*$TILE_SIZE+$ITEMSBAR_LEFT, $ITEMSBAR_TOP, $TILE_SIZE, $TILE_SIZE, RASTER_DPo) # before this, UpdateWindow must be called; otherwise, the TSW's own redrawing process (caused by `InvalidateRect` above) may clear the drawing here
             else
               @winDown = false
-              len = SendMessage.call($hWndText, WM_GETTEXTLENGTH, 0, nil)
-              showMsgTxtbox(10, LONGNAMES[15]) if len < 31 or len > 64 # otherwise, it's because "You must be near the stairs to fly!"
+              showMsgTxtbox(10, $str::LONGNAMES[16].gsub(' ', '')) if readMemoryDWORD(TEDIT8_MSGID_ADDR) != ORB_FLIGHT_RULE_MSG_ID # otherwise, it's because "you must be near the stairs to fly!"
             end
           end
         elsif !@winDown # only trigger at the first time
@@ -627,6 +634,7 @@ module HookProcAPI
     return 1 if block # block input
     return CallNextHookEx.call(@hkhook, nCode, wParam, lParam)
   rescue Exception => @error
+    PostMessage.call(0, WM_APP, 0, 0)
     return CallNextHookEx.call(@hkhook, nCode, wParam, lParam)
   end
   MouseProc = API::Callback.new('LLL', 'L', &method(:_msHook))
@@ -663,10 +671,11 @@ module HookProcAPI
     InvalidateRect.call($hWnd || 0, $msgRect, 0) # clear message bar
     ClipCursor.call(nil) # do not confine cursor range
     mFac = Monsters.statusFactor
-    return if mFac == 1 or !$hWndMemo
-    SendMessage.call($hWndMemo[0] || 0, WM_SETTEXT, 0, Monsters.heroHP.to_s)
-    SendMessage.call($hWndMemo[1] || 0, WM_SETTEXT, 0, Monsters.heroATK.to_s)
-    SendMessage.call($hWndMemo[2] || 0, WM_SETTEXT, 0, Monsters.heroDEF.to_s)
+    return true if mFac == 1 or !$hWndMemo or $hWndMemo.empty?
+    SendMessage.call($hWndMemo[0], WM_SETTEXT, 0, Monsters.heroHP.to_s)
+    SendMessage.call($hWndMemo[1], WM_SETTEXT, 0, Monsters.heroATK.to_s)
+    SendMessage.call($hWndMemo[2], WM_SETTEXT, 0, Monsters.heroDEF.to_s)
+    return true
   end
   private :_msHook
   private :_keyHook
@@ -689,10 +698,10 @@ def showMsgTxtboxW(textIndex, *argv)
   SendMessageW.call($hWndText, WM_SETTEXT, 0, textIndex < 0 ? '' : Str.utf8toWChar(Str::StrCN::STRINGS[textIndex] % argv))
 end
 def msgboxTxtA(textIndex, flag=MB_ICONASTERISK, *argv)
-  API.msgbox(Str::StrEN::STRINGS[textIndex] % argv, flag, MessageBox)
+  API.msgbox(Str::StrEN::STRINGS[textIndex] % argv, flag)
 end
 def msgboxTxtW(textIndex, flag=MB_ICONASTERISK, *argv)
-  API.msgbox(Str.utf8toWChar(Str::StrCN::STRINGS[textIndex] % argv), flag, MessageBoxW, "t\0s\0w\0M\0P\0\0\0")
+  API.msgbox(Str.utf8toWChar(Str::StrCN::STRINGS[textIndex] % argv), flag, MessageBoxW)
 end
 def readMemoryDWORD(address)
   ReadProcessMemory.call_r($hPrc, address, $buf, 4, 0)
@@ -706,19 +715,20 @@ def callFunc(address) # execute the subroutine at the given address
   SendMessage.call($hWnd, WM_COMMAND, MIDSPEED_MENUID, 0)
   writeMemoryDWORD(MIDSPEED_ADDR, MIDSPEED_ORIG) # restore
 end
-def preExit() # finalize
+def disposeRes() # when switching to a new TSW process, hDC and hPrc will be regenerated, and the old ones should be disposed of
   HookProcAPI.unhookK
   HookProcAPI.unhookM(true)
-  DeleteObject.call($hPen || 0)
-  DeleteObject.call($hPen2 || 0)
-  DeleteObject.call($hGUIFont || 0)
   DeleteObject.call($hBMP || 0)
   DeleteDC.call($hMemDC || 0)
   ReleaseDC.call($hWnd || 0, $hDC || 0)
-##### THIS WILL BE DELETED IN THE FUTURE; tswKai SHOULD TAKE OVER THIS PART #####
-  WriteProcessMemory.call($hPrc || 0, HELP_ADDR, "\x53\x8B\xD8\x6A\x05\x68", 7, 0) # restore the function of the help menu
   CloseHandle.call($hPrc || 0)
+end
+def preExit() # finalize
+  DeleteObject.call($hPen || 0)
+  DeleteObject.call($hPen2 || 0)
+  DeleteObject.call($hGUIFont || 0)
   UnregisterHotKey.call(0, 0)
+  disposeRes()
 end
 def raise_r(*argv)
   preExit() # ensure all resources disposed
@@ -771,8 +781,7 @@ def init()
   edit8 = readMemoryDWORD($TTSW+OFFSET_EDIT8)
   $hWndText = readMemoryDWORD(edit8+OFFSET_HWND)
   $IMAGE6 = readMemoryDWORD($TTSW+OFFSET_IMAGE6)
-  $hWndMemo = []
-  OFFSET_MEMO123.each {|i| $hWndMemo.push(readMemoryDWORD(readMemoryDWORD($TTSW+i)+OFFSET_HWND))}
+  $hWndMemo = [] # reset as empty here and will be assigned later, because during prologue, these textboxes' hWnd are not assigned yet (a potential workaround is to `mov eax, TTSW10.TMemo1/2/3` and `call TWinControl.HandleNeeded`, but I'm lazy and it is really not worth the trouble)
 
   if Str.isCHN()
     alias :showMsg :showMsgW
@@ -797,9 +806,6 @@ def init()
   SetBkColor.call($hDC, HIGHLIGHT_COLOR[-2])
   SetBkMode.call($hDC, 1) # transparent
   SetTextColor.call($hDC, HIGHLIGHT_COLOR.last)
-  # change the function of the help menu to "refresh"
-##### THIS WILL BE DELETED IN THE FUTURE; tswKai SHOULD TAKE OVER THIS PART #####
-  WriteProcessMemory.call_r($hPrc, HELP_ADDR, [0xe8, REFRESH_ADDR-HELP_ADDR-5, 0xc3].pack('clc'), 6, 0) # Help2Click -> call 454de8; ret; # syokidata2
 end
 
 $hGUIFont = CreateFontIndirect.call_r(DAMAGE_DISPLAY_FONT.pack('L5C8a32'))
@@ -822,7 +828,7 @@ while GetMessage.call($buf, 0, 0, 0) > 0
 
   msg = $buf.unpack(MSG_INFO_STRUCT)
   next if msg[1] != WM_HOTKEY
-  
+
   init if IsWindow.call($hWnd).zero? # reinit if TSW has quitted
   time = msg[4]
   diff = time - $time
