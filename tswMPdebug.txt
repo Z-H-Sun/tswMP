@@ -13,7 +13,7 @@ $isCHN = 1
 # Uncomment the following line to make tswSL auto decide which language to use according to which TSW is running
 # $isCHN = false
 
-# The following lines modifies the hotkey to be Alt+F2
+# The following lines modify the hotkey for re-hook and quit to be Alt+F2
 # *Unlike other settings, this will be loaded only ONE-TIME upon initialization of this app and will NOT be updated every time you start a new TSW process*
 MP_MODIFIER = 1
 MP_HOTKEY = 113
@@ -23,6 +23,11 @@ MP_HOTKEY = 113
 # And so on.
 # Modifier 0=None, 1=Alt, 2=Ctrl, 4=Shift, 8=Win.
 # Virtual key code: https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes, e.g., A-Z is just their ASCII (65-90). F1-F12 is 112-123.
+
+# The following line modifies the hotkeys for teleportation and using items to be `ESC`
+MP_KEY1 = VK_ESCAPE
+# There can be an alternative hotkey that serves the same purpose as the primary one; if you don't need it, set it as 0
+MP_KEY2 = 0
 
 # To successfully quit the program by holding the hotkey, you should make sure your keyboard repeat delay is longer than INTERVAL_REHOOK AND keyboard repeat rate is shorter than INTERVAL_QUIT. The default setting is good as long as you have not made changes to your system settings; otherwise, you should make changes accordingly to the following two lines
 # Note that INTERVAL_REHOOK should not be too small (typically >150 ms), because you need to quickly press the hotkey twice within INTERVAL_REHOOK to trigger the "rehook" function

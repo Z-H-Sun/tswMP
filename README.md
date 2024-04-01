@@ -1,6 +1,17 @@
 # tswMP
 Tower of the Sorcerer for Windows MovePoint (座標移動) / 魔塔英文原版主角坐标快捷移动
 
+This repo is the "standalone" version of [`tswKai3`](https://github.com/Z-H-Sun/tswKai)'s map enhancement functions. However, it does not come with the latest updates, and its usage since V3.2 has not been well-documented (the latest documentation is for [V3.0](https://github.com/Z-H-Sun/tswMP/tree/c63b2f1b7ae94d4d814bd079524b196f77b337a5)), so it is recommended to visit the [`tswKai3`](https://github.com/Z-H-Sun/tswKai) main repo instead.
+
+本仓库是 [`tswKai3`](https://github.com/Z-H-Sun/tswKai) 中地图增强功能的独立分割版，但是这里并没有加入最新的更新，而且也没有自 V3.2 版本起的使用文档（最新的使用文档是 [V3.0](https://github.com/Z-H-Sun/tswMP/tree/c63b2f1b7ae94d4d814bd079524b196f77b337a5) 版的），因此推荐访问 [`tswKai3`](https://github.com/Z-H-Sun/tswKai) 主仓库。
+
+> [!note]
+> This repo has been archived. For more recent development of this software, see the [`tswKai3`](https://github.com/Z-H-Sun/tswKai) main repo.<br>
+本仓库现已封存。该软件的最新开发更新请移步主仓库 [`tswKai3`](https://github.com/Z-H-Sun/tswKai)。
+
+![座標移動](https://pixiv.cat/21958211.jpg)
+
+<!--
 \* **New Feature / 新功能：** Use shortcut keys to use an item! / 使用快捷键调用宝物！
 
 See Also / 另请参见: [tswKai（改）](https://github.com/Z-H-Sun/tswKai); [tswSL（快捷存档）](https://github.com/Z-H-Sun/tswSL); [tswBGM（背景音乐）](https://github.com/Z-H-Sun/tswBGM); [PC98TSKai（PC98 原初版魔塔改）](https://github.com/Z-H-Sun/PC98TSKai)
@@ -8,8 +19,6 @@ See Also / 另请参见: [tswKai（改）](https://github.com/Z-H-Sun/tswKai); [
 ***\* A visual user guide can be found here! / 用法视频详解参见此处！*** <ins>[BV1n341117tw](https://www.bilibili.com/video/BV1n341117tw)</ins>
 
 ***\* Note that there have been updates since the video was published. See the documentations for the usage of the latest version. / 请注意视频发布后有新的更新，因此最新版本的用法请参照文档***
-
-![座標移動](https://pixiv.cat/21958211.jpg)
 
 ## Scope of application / 适用范围
 * This mod can only be applied to TSW English Ver 1.2. You can download its installer <ins>[here](https://ftp.vector.co.jp/14/65/3171/tsw12.exe)</ins> or visit [the official website](http://hp.vector.co.jp/authors/VA013374/game/egame0.html). You will have to run the executable **as administrator** to install. / 本修改器仅适用于英文原版魔塔V1.2，可于<ins>[此处](https://ftp.vector.co.jp/14/65/3171/tsw12.exe)</ins>下载其安装包，或[点此](http://hp.vector.co.jp/authors/VA013374/game/egame0.html)访问官网。必须右键**以管理员权限运行**才可成功安装。
